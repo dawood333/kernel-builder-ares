@@ -202,25 +202,11 @@ jobs:
 
           curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash -s main
 
-          sed -i '/config ARM64/a \	select ARCH_HAS_SET_MEMORY' arch/arm64/Kconfig
-          mkdir -p arch/arm64/include/asm/
-          cat <<EOF > arch/arm64/include/asm/set_memory.h
-          #ifndef _ASM_ARM64_SET_MEMORY_H
-          #define _ASM_ARM64_SET_MEMORY_H
-          int set_memory_ro(unsigned long addr, int numpages);
-          int set_memory_rw(unsigned long addr, int numpages);
-          int set_memory_x(unsigned long addr, int numpages);
-          int set_memory_nx(unsigned long addr, int numpages);
-          #endif
-          EOF
-          
           echo -e "CONFIG_KSU=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
           echo -e "CONFIG_KSU_MANUAL_HOOK=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
 
-          echo -e "CONFIG_DEBUG_KERNEL=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
           echo -e "CONFIG_KALLSYMS=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
           echo -e "CONFIG_KALLSYMS_ALL=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_KPM=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
           
           cat arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
       # - name: 开启lxc和docker配置
