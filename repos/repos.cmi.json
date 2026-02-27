@@ -3,7 +3,7 @@
     "kernelSource": {
       "name": "Chopin-AndroidS-KVM-Proton-release",
       "repo": "https://github.com/seriaTvT/kernel_xiaomi_chopin_android_S",
-      "branch": "S",
+      "branch": "ReSukiSU",
       "device": "chopin",
       "defconfig": "chopin_userkvm_defconfig"
     },
