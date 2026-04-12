@@ -232,50 +232,50 @@ jobs:
       #     ./runcpatch.sh kernel/cgroup/cgroup.c               
       #     fi
       
-      - name: 开启lxc和docker配置
-        working-directory: ${{ env.KERNEL_NAME }}
-        env:
-          arch: ${{ steps.generate-args.outputs.ARCH }}
-        run: |
-          echo -e "CONFIG_POSIX_MQUEUE=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_CGROUP_DEVICE=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_IPC_NS=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_NETFILTER_XT_MATCH_IPVS=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_CGROUP_PIDS=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_USER_NS=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_CGROUP_PERF=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_CFS_BANDWIDTH=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_IP_VS=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_IP_VS_PROTO_TCP=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_IP_VS_PROTO_UDP=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_IP_VS_RR=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_IP_VS_NFCT=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_MACVLAN=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_MACVTAP=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_VXLAN=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_BRIDGE_VLAN_FILTERING=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_NET_CLS_CGROUP=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_CGROUP_NET_PRIO=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_BLK_CGROUP=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_BLK_DEV_THROTTLING=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_CFQ_GROUP_IOSCHED=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_HUGETLB_PAGE=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_IPVLAN=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_IPVTAP=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_CGROUP_HUGETLB=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_NET_L3_MASTER_DEV=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      # - name: 开启lxc和docker配置
+      #   working-directory: ${{ env.KERNEL_NAME }}
+      #   env:
+      #     arch: ${{ steps.generate-args.outputs.ARCH }}
+      #   run: |
+      #     echo -e "CONFIG_POSIX_MQUEUE=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     echo -e "CONFIG_CGROUP_DEVICE=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     echo -e "CONFIG_IPC_NS=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     echo -e "CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     echo -e "CONFIG_NETFILTER_XT_MATCH_IPVS=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     echo -e "CONFIG_CGROUP_PIDS=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     echo -e "CONFIG_USER_NS=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     echo -e "CONFIG_CGROUP_PERF=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     echo -e "CONFIG_CFS_BANDWIDTH=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     echo -e "CONFIG_IP_VS=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     echo -e "CONFIG_IP_VS_PROTO_TCP=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     echo -e "CONFIG_IP_VS_PROTO_UDP=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     echo -e "CONFIG_IP_VS_RR=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     echo -e "CONFIG_IP_VS_NFCT=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     echo -e "CONFIG_MACVLAN=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     echo -e "CONFIG_MACVTAP=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     echo -e "CONFIG_VXLAN=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     echo -e "CONFIG_BRIDGE_VLAN_FILTERING=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     echo -e "CONFIG_NET_CLS_CGROUP=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     echo -e "CONFIG_CGROUP_NET_PRIO=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     echo -e "CONFIG_BLK_CGROUP=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     echo -e "CONFIG_BLK_DEV_THROTTLING=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     echo -e "CONFIG_CFQ_GROUP_IOSCHED=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     echo -e "CONFIG_HUGETLB_PAGE=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     echo -e "CONFIG_IPVLAN=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     echo -e "CONFIG_IPVTAP=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     echo -e "CONFIG_CGROUP_HUGETLB=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     echo -e "CONFIG_NET_L3_MASTER_DEV=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
 
-          echo -e "CONFIG_IP6_NF_TARGET_MASQUERADE=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_IP6_NF_NAT=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          # echo -e "CONFIG_IP_SCTP=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_NFT_CT=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_NFT_FIB_IPV4=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_NFT_FIB_IPV6=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_NFT_FIB=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_NFT_MASQ=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_NFT_NAT=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_NF_TABLES=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     echo -e "CONFIG_IP6_NF_TARGET_MASQUERADE=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     echo -e "CONFIG_IP6_NF_NAT=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     # echo -e "CONFIG_IP_SCTP=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     echo -e "CONFIG_NFT_CT=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     echo -e "CONFIG_NFT_FIB_IPV4=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     echo -e "CONFIG_NFT_FIB_IPV6=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     echo -e "CONFIG_NFT_FIB=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     echo -e "CONFIG_NFT_MASQ=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     echo -e "CONFIG_NFT_NAT=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+      #     echo -e "CONFIG_NF_TABLES=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
 
       - name: "👍 Make defconfig"
         working-directory: ${{ env.KERNEL_NAME }}
