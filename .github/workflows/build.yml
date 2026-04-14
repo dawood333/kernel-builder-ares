@@ -287,6 +287,20 @@ jobs:
       #     echo -e "CONFIG_NFT_NAT=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
       #     echo -e "CONFIG_NF_TABLES=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
 
+      - name: "🥸 Spoof Kernel Version Information"
+        working-directory: ${{ env.KERNEL_NAME }}
+        run: |
+          # 修改 Makefile 中的 EXTRAVERSION
+          sed -i 's/^EXTRAVERSION =.*/EXTRAVERSION = -ge4fbe2046dc7/' Makefile
+
+          # 禁用 Git 自动追加版本号
+          sed -i '2i exit 0' scripts/setlocalversion
+
+          # 伪装编译器字符串 (scripts/mkcompile_h COMPILER)
+          # 需要转义
+          COMPILER_STR="(Android (6443078 based on r383902) clang version 11.0.1 (https:\/\/android.googlesource.com\/toolchain\/llvm-project b397f81060ce6d701042b782172ed13bee898b79), LLD 11.0.1 (\/buildbot\/tmp\/tmp6_m7QH b397f81060ce6d701042b782172ed13bee898b79))"
+          sed -i "s/^COMPILER=.*/COMPILER=\"$COMPILER_STR\"/" scripts/mkcompile_h
+
       - name: "👍 Make defconfig"
         working-directory: ${{ env.KERNEL_NAME }}
         env:
@@ -300,6 +314,11 @@ jobs:
         working-directory: ${{ env.KERNEL_NAME }}
         env:
           args: ${{ steps.generate-args.outputs.args }}
+          # KBUILD 环境变量伪装
+          KBUILD_BUILD_USER: "builder"
+          KBUILD_BUILD_HOST: "m1-xm-ota-bd094.bj.idc.xiaomi.com"
+          KBUILD_BUILD_TIMESTAMP: "Thu Nov 10 10:27:37 CST 2022"
+          KBUILD_BUILD_VERSION: "1"
         run: |
           echo "PATH Variable: $PATH"
           make ${{ env.args }}
