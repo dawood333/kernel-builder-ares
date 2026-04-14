@@ -53,8 +53,8 @@ build job          → 编译内核，上传 Image + AnyKernel3.zip
 ## 致谢
 
 - [ChopinKernels/kernel-builder-chopin](https://github.com/ChopinKernels/kernel-builder-chopin) — 原仓库
-- [cctv18/oppo_oplus_realme_sm8850](https://github.com/cctv18/oppo_oplus_realme_sm8850) — 脚本灵感
 - [DogDayAndroid/Android-Kernel-Builder](https://github.com/DogDayAndroid/Android-Kernel-Builder) — 项目原型
+- [cctv18/oppo_oplus_realme_sm8850](https://github.com/cctv18/oppo_oplus_realme_sm8850) — 脚本灵感
 - [ReSukiSU](https://github.com/ReSukiSU/ReSukiSU) — KernelSU Manual Hook
 - [SukiSU-Ultra/SukiSU_KernelPatch_patch](https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch) — KPM 补丁工具
 - [KernelSU-Next/KPatch-Next](https://github.com/KernelSU-Next/KPatch-Next) — KPN 补丁工具
