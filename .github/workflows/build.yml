@@ -415,7 +415,7 @@ jobs:
         run: |
           cat << 'EOF' > release_notes.md
           ### 构建信息
-          - 设备: chopin (Redmi K40 Gaming / POCO F3 GT)
+          - 设备: chopin (Redmi Note 10 Pro / POCO X3 GT)
           - 内核版本: ${{ env.FULL_VERSION }}
           - 编译时间: ${{ env.TIME_FORM }}
           - KernelSU: ${{ env.KSU_STATUS }}
@@ -449,6 +449,6 @@ jobs:
 
           gh release create "${{ env.TAG_HEAD }}-${{ env.TIME }}" \
             --repo "${{ github.repository }}" \
-            --title "${{ env.TAG_HEAD }}-${{ env.FULL_VERSION }}" \
+            --title "${{ env.FULL_VERSION }}-${{ env.TIME }}" \
             --notes-file release_notes.md \
             "${RELEASE_FILES[@]}"
