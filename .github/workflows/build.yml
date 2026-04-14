@@ -1,201 +1,176 @@
-name: "Build kernels"
+name: Chopin 4.14 内核构建
 
 env:
+  TZ: Asia/Shanghai
+
+  # ── 内核源码 ──
+  KERNEL_NAME: Chopin-AndroidS-KVM-Proton-release
+  KERNEL_REPO: https://github.com/seriaTvT/kernel_xiaomi_chopin_android_S
+  KERNEL_BRANCH: ReSukiSU
+  KERNEL_DEVICE: chopin
+  DEFCONFIG_NAME: chopin_userkvm_defconfig
+
+  # ── 工具链 (Proton Clang) ──
+  CLANG_REPO: https://github.com/kdrag0n/proton-clang
+  CLANG_BRANCH: master
+  CLANG_NAME: proton-clang
+
+  # ── AnyKernel3 ──
+  ANYKERNEL_REPO: https://github.com/osm0sis/AnyKernel3
+  ANYKERNEL_BRANCH: master
+
+  # ── 构建参数 ──
+  ARCH: arm64
   OUT_DIR: "${{ github.workspace }}/out"
+
+  # ── KBUILD 伪装（不可修改）──
+  KBUILD_BUILD_USER: builder
+  KBUILD_BUILD_HOST: m1-xm-ota-bd094.bj.idc.xiaomi.com
+  KBUILD_BUILD_TIMESTAMP: "Thu Nov 10 10:27:37 CST 2022"
+  KBUILD_BUILD_VERSION: "1"
+
+  # ── ccache ──
+  CCACHE_KEY: ccache-chopin-4.14
 
 on:
   workflow_dispatch:
+    inputs:
+      ksu_enabled:
+        description: '是否集成 ReSukiSU (Manual Hook)'
+        required: true
+        type: boolean
+        default: true
+
+      kpm_enable:
+        description: 'KPM模式 (false-关闭, builtin-使用ReSukiSU内置KPM, kpn-使用独立KPatch-Next实现)'
+        required: true
+        type: choice
+        default: 'builtin'
+        options:
+          - 'false'
+          - 'builtin'
+          - 'kpn'
+
+      use_anykernel:
+        description: '是否使用 AnyKernel3 打包刷入包（关闭时仅上传 Image）'
+        required: true
+        type: boolean
+        default: true
+
+      ccache_enabled:
+        description: '是否启用 ccache 加速编译'
+        required: true
+        type: boolean
+        default: true
+
+      ccache_update:
+        description: '更新 ccache 缓存（更改编译配置或需要刷新缓存时开启）'
+        required: true
+        type: boolean
+        default: false
+
+      release:
+        description: '是否发布到 GitHub Releases'
+        required: true
+        type: boolean
+        default: true
+
+      kernel_suffix:
+        description: '自定义内核后缀（留空使用默认，开头勿加连字符）'
+        required: false
+        type: string
+        default: ''
 
 jobs:
-  Set-repos:
-    name: "🐂 Parse repos.json"
-    runs-on: ubuntu-latest
-    outputs:
-      repos: ${{ steps.generate-matrix.outputs.repos }}
-      builddate: ${{ steps.generate-builddate.outputs.builddate }}
-    steps:
-      - name: "😄 Checkout"
-        uses: actions/checkout@v4
-
-      - name: "😆 Generate Matrix"
-        id: generate-matrix
-        run: |
-          echo "repos<<EOF" >> $GITHUB_OUTPUT
-          jq -s '[.[][]]' repos/repos*.json >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-      - name: "⏰ Set builddate"
-        id: generate-builddate
-        run: echo "builddate=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
-
-  Build-Kernel:
-    name: "🐎 Build kernel"
+  # ============================================================
+  #  构建内核
+  # ============================================================
+  build:
+    name: 构建内核
     runs-on: ubuntu-22.04
-    needs:
-      - Set-repos
-    strategy:
-      max-parallel: 4
-      fail-fast: false
-      matrix:
-        repos: ${{ fromJSON(needs.Set-repos.outputs.repos) }}
-    env:
-      WORKSPACE: ${{ github.workspace }}
-
-      builddate: "${{ needs.Set-repos.outputs.builddate }}"
-
-      KERNEL_NAME: ${{ matrix.repos.kernelSource.name }}
-      KERNEL_REPO: ${{ matrix.repos.kernelSource.repo }}
-      KERNEL_BRANCH: ${{ matrix.repos.kernelSource.branch }}
-      KERNEL_DEVICE: ${{ matrix.repos.kernelSource.device }}
-
-      DEFCONFIG_NAME: ${{ matrix.repos.kernelSource.defconfig }}
-
-      withKernelSU: ${{ matrix.repos.withKernelSU }}
-      ccache: ${{ matrix.repos.ccache }}
-      useAnykernel: ${{ matrix.repos.AnyKernel3.use }}
-      release: ${{ matrix.repos.AnyKernel3.release }}
+    outputs:
+      ak3name: ${{ steps.pack_anykernel.outputs.ak3name }}
+      image_name: ${{ steps.prepare_image.outputs.image_name }}
+      builddate: ${{ steps.setup_env.outputs.builddate }}
     steps:
-      - name: "⭐ Install prerequisites"
+
+      # ── 1. 初始化构建环境 ──
+      - name: 初始化构建环境
+        id: setup_env
         run: |
-          # Disable azure mirror because it is very slow sometimes
+          echo "builddate=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
+
+          # 禁用较慢的 Azure 镜像
           sudo sed -i '/azure.archive.ubuntu.com/d' /etc/apt/apt-mirrors.txt
-          echo "Using mirrors:"
-          cat /etc/apt/apt-mirrors.txt
           sudo apt-get update
-          sudo apt-get install -y build-essential bc gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi libssl-dev libfl-dev
-          sudo apt-get install -y curl git ftp lftp wget libarchive-tools ccache python2 python2-dev
-          sudo apt-get install -y zip unzip tar gzip bzip2 rar unrar
+          sudo apt-get install -y build-essential bc gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi \
+            libssl-dev libfl-dev curl git ccache python2 python2-dev zip unzip
 
-      - name: "🚄 Create cache key from `repos`"
-        if: ${{ env.ccache == 'true' }}
-        id: ccache_key
+      # ── 2. 克隆内核源码 ──
+      - name: 克隆内核源码
         run: |
-          ccache -o compression=false -o cache_dir=$HOME/.ccache
-          echo "CACHE_KEY=$(echo -n '${{ toJSON(matrix.repos) }}' | base64 -w 0 | cut -c -48)" >> $GITHUB_OUTPUT
+          git clone --recursive --depth=1 -j $(nproc) \
+            --branch ${{ env.KERNEL_BRANCH }} \
+            ${{ env.KERNEL_REPO }} \
+            ${{ env.KERNEL_NAME }}
 
-      - name: "🚅 Cache ccache files"
-        if: ${{ env.ccache == 'true' }}
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.ccache
-            ${{ env.OUT_DIR }}
-          key: ccache-${{ env.KERNEL_NAME }}-${{ steps.ccache_key.outputs.CACHE_KEY }}-${{ env.builddate }}
-          restore-keys: |
-            ccache-${{ env.KERNEL_NAME }}-${{ steps.ccache_key.outputs.CACHE_KEY }}-${{ env.builddate }}
-
-      - name: "⏰ Setup Anykernel3"
-        env:
-          params: "${{ toJSON(matrix.repos.AnyKernel3) }}"
+      # ── 3. 获取工具链 ──
+      - name: 获取工具链 (Proton Clang)
         run: |
-          ANYKERNEL_REPO=$(echo $params | jq -r ".repo")
-          ANYKERNEL_BRANCH=$(echo $params | jq -r ".branch")
-          git clone --recursive --depth=1 -j $(nproc) --branch $ANYKERNEL_BRANCH $ANYKERNEL_REPO AnyKernel3
+          git clone --recursive --depth=1 -j $(nproc) \
+            --branch ${{ env.CLANG_BRANCH }} \
+            ${{ env.CLANG_REPO }} \
+            ${{ env.CLANG_NAME }}
+          echo "${{ github.workspace }}/${{ env.CLANG_NAME }}/bin" >> $GITHUB_PATH
 
-          echo "🤔 Setup Anykernel3 => ($ANYKERNEL_REPO)"
+      # ── 4. 准备 AnyKernel3 ──
+      - name: 准备 AnyKernel3
+        if: inputs.use_anykernel
+        run: |
+          git clone --recursive --depth=1 -j $(nproc) \
+            --branch ${{ env.ANYKERNEL_BRANCH }} \
+            ${{ env.ANYKERNEL_REPO }} \
+            AnyKernel3
+
           sed -i 's/do.devicecheck=1/do.devicecheck=0/g' AnyKernel3/anykernel.sh
           sed -i 's!block=/dev/block/platform/omap/omap_hsmmc.0/by-name/boot;!block=auto;!g' AnyKernel3/anykernel.sh
-          sed -i 's/is_slot_device=1;/is_slot_device=auto;/g' AnyKernel3/anykernel.sh        
-       
-      - name: "🌟 Clone kernel source => (${{ env.KERNEL_REPO }})"
+          sed -i 's/is_slot_device=1;/is_slot_device=auto;/g' AnyKernel3/anykernel.sh
+
+      # ── 5. 配置并恢复 ccache ──
+      - name: 配置 ccache
+        if: inputs.ccache_enabled
         run: |
-          git clone --recursive --depth=1 -j $(nproc) --branch $KERNEL_BRANCH $KERNEL_REPO $KERNEL_NAME
+          ccache -o compression=false -o cache_dir=$HOME/.ccache
+          echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
 
-          echo "🤔 Clone kernel source => ($KERNEL_REPO)"
+      - name: 载入 ccache 缓存
+        if: inputs.ccache_enabled
+        uses: actions/cache@v4
+        id: ccache_restore
+        with:
+          path: ~/.ccache
+          key: ${{ env.CCACHE_KEY }}-${{ runner.os }}-${{ github.ref_name }}
+          restore-keys: |
+            ${{ env.CCACHE_KEY }}-${{ runner.os }}-
+            ${{ env.CCACHE_KEY }}-
 
-      - name: "💫 Get toolchains"
+      - name: 清除旧 ccache 缓存
+        if: inputs.ccache_enabled && inputs.ccache_update
         env:
-          toolchains: "${{ toJSON(matrix.repos.toolchains) }}"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          toolchains_num="$(echo $toolchains | jq 'length')"
-          echo "🤔 There is $toolchains_num defined toolchains."
-          for ((i=0;i<toolchains_num;i++)); do
-            toolchain_name=$(echo $toolchains | jq -r ".[$i].name")
-            # Github
-            toolchain_repo=$(echo $toolchains | jq -r ".[$i].repo")
-            toolchain_branch=$(echo $toolchains | jq -r ".[$i].branch")
-            # From archive
-            toolchain_url=$(echo $toolchains | jq -r ".[$i].url")
-            
-            echo $toolchain_url
-            if [ -z "${toolchain_url:-}" ] || [ "$toolchain_url" = "null" ];  then
-              git clone --recursive --depth=1 -j $(nproc) --branch $toolchain_branch $toolchain_repo $toolchain_name
-              echo "🤔 Clone $toolchain_name => ($toolchain_repo)"
-            else
-              wget "$toolchain_url"
-              filename="${toolchain_url##*/}"
-              mkdir -p $toolchain_name
-              case "$filename" in
-                *.zip)
-                  unzip -d $toolchain_name "$filename"
-                  ;;
-                *.tar)
-                  tar xvf "$filename" -C $toolchain_name
-                  ;;
-                *.tar.gz)
-                  tar zxvf "$filename" -C $toolchain_name
-                  ;;
-                *.rar)
-                  unrar x "$filename" $toolchain_name
-                  ;;
-                *)
-                  echo "unknown file type: $filename"
-                  ;;
-              esac
-            fi
-
-            jq -r ".[$i].binPath[] | tostring" <<< "$toolchains" | while read -r bin_path; do
-              echo "$WORKSPACE/$toolchain_name/$bin_path" >> $GITHUB_PATH
-            done
-          done
-
-      - name: "😎 Set args"
-        id: generate-args
-        env:
-          params: "${{ toJSON(matrix.repos.params) }}"
-          THREAD: $(nproc --all)
-        run: |
-          echo "🤔 PATH Variable: $PATH"
-
-          ARCH=$(echo $params | jq -r ".ARCH")
-          CC=$(echo $params | jq -r ".CC")
-
-          args="-j${{ env.THREAD }}"
-          if [ -n "${{ env.OUT_DIR }}" ]; then
-            mkdir -p ${{ env.OUT_DIR }} && args="$args O=${{ env.OUT_DIR }}"
+          echo "正在清除仓库中的旧 ccache 缓存..."
+          CACHE_KEY="${{ env.CCACHE_KEY }}-${{ runner.os }}-${{ github.ref_name }}"
+          if gh cache delete "$CACHE_KEY" -R ${{ github.repository }}; then
+            echo "成功删除旧的 ccache 缓存！"
+          else
+            echo "旧缓存不存在或已被清理。"
           fi
-          if [ -n "$ARCH" ]; then
-            args="$args ARCH=$ARCH"
-          fi
-          if [ -n "$CC" ]; then
 
-            if [[ "$CC" == *"/"* ]]; then
-              CC=${{ env.WORKSPACE }}/$CC
-            fi
-
-            if [ ${{ env.ccache }} = true ]; then
-              args="$args CC=\"ccache $CC\""
-            else
-              args="$args CC=$CC"
-            fi
-          fi
-          while read -r externalCommand; do
-            key=$(echo "$externalCommand" | cut -d= -f1)
-            value=$(echo "$externalCommand" | cut -d= -f2)
-            if [[ "$value" == *"/"* ]]; then
-              value="${{ env.WORKSPACE }}/$value"
-            fi
-            args="$args $key=$value"
-          done < <(jq -r '.externalCommand | to_entries[] | "\(.key)=\(.value)"' <<< "$params")
-        
-          echo "🤔 $args"
-          echo "ARCH=$ARCH" >> $GITHUB_OUTPUT
-          echo "args=$args" >> $GITHUB_OUTPUT
-
-      - name: "😋 Update ReSukiSU (Manual Hook)"
+      # ── 6. 集成 ReSukiSU ──
+      - name: 集成 ReSukiSU (Manual Hook)
+        if: inputs.ksu_enabled
         working-directory: ${{ env.KERNEL_NAME }}
-        env:
-          arch: ${{ steps.generate-args.outputs.ARCH }}
-        if: ${{ env.withKernelSU == 'true' }}
         run: |
           if [ -d "./KernelSU" ]; then
             rm -rf "./KernelSU"
@@ -206,88 +181,27 @@ jobs:
 
           curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash -s main
 
-          echo -e "CONFIG_KSU=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_KSU_MANUAL_HOOK=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_KSU_MANUAL_HOOK_AUTO_INPUT_HOOK=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_KSU_MANUAL_HOOK_AUTO_SETUID_HOOK=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_KSU_MANUAL_HOOK_AUTO_INITRC_HOOK=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+          echo -e "CONFIG_KSU=y" >> arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
+          echo -e "CONFIG_KSU_MANUAL_HOOK=y" >> arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
+          echo -e "CONFIG_KSU_MANUAL_HOOK_AUTO_INPUT_HOOK=y" >> arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
+          echo -e "CONFIG_KSU_MANUAL_HOOK_AUTO_SETUID_HOOK=y" >> arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
+          echo -e "CONFIG_KSU_MANUAL_HOOK_AUTO_INITRC_HOOK=y" >> arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
 
-          echo -e "CONFIG_KSU_MULTI_MANAGER_SUPPORT=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+          echo -e "CONFIG_KSU_MULTI_MANAGER_SUPPORT=y" >> arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
 
-          echo -e "CONFIG_KALLSYMS=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_KALLSYMS_ALL=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_KPM=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "CONFIG_KALLSYMS_ABSOLUTE_PERCPU=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-          cat arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+          echo -e "CONFIG_KALLSYMS=y" >> arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
+          echo -e "CONFIG_KALLSYMS_ALL=y" >> arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
+          echo -e "CONFIG_KALLSYMS_ABSOLUTE_PERCPU=y" >> arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
 
-      # - name: 开启lxc和docker配置
-      #   working-directory: ${{ env.KERNEL_NAME }}
-      #   env:
-      #     arch: ${{ steps.generate-args.outputs.ARCH }}
-      #   run: |
-      #       wget https://github.com/liangsai12/Android-Kernel-Builder-chopin/releases/download/1.0.0/add-lxc-docker-custom.sh
-      #       chmod 755 add-lxc-docker-custom.sh
-      #       ./add-lxc-docker-custom.sh arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #       echo "# CONFIG_ANDROID_PARANOID_NETWORK is not set" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+          # KPM 内核配置仅在 builtin 模式下需要编译时启用
+          if [[ "${{ inputs.kpm_enable }}" == "builtin" ]]; then
+            echo -e "CONFIG_KPM=y" >> arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
+          fi
 
-      # - name: 添加runc补丁
-      #   working-directory: ${{ env.KERNEL_NAME }}
-      #   run: |
-      #     wget https://github.com/fate-think/LXC-DOCKER-KernelSU_Action/releases/download/1.0.0/runcpatch.sh
-      #     chmod a+x runcpatch.sh
-      #     if [ -f kernel/cgroup.c ]; then
-      #     ./runcpatch.sh kernel/cgroup.c               
-      #     fi
-      #     if [ -f kernel/cgroup/cgroup.c ]; then
-      #     ./runcpatch.sh kernel/cgroup/cgroup.c               
-      #     fi
-      
-      # - name: 开启lxc和docker配置
-      #   working-directory: ${{ env.KERNEL_NAME }}
-      #   env:
-      #     arch: ${{ steps.generate-args.outputs.ARCH }}
-      #   run: |
-      #     echo -e "CONFIG_POSIX_MQUEUE=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #     echo -e "CONFIG_CGROUP_DEVICE=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #     echo -e "CONFIG_IPC_NS=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #     echo -e "CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #     echo -e "CONFIG_NETFILTER_XT_MATCH_IPVS=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #     echo -e "CONFIG_CGROUP_PIDS=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #     echo -e "CONFIG_USER_NS=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #     echo -e "CONFIG_CGROUP_PERF=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #     echo -e "CONFIG_CFS_BANDWIDTH=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #     echo -e "CONFIG_IP_VS=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #     echo -e "CONFIG_IP_VS_PROTO_TCP=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #     echo -e "CONFIG_IP_VS_PROTO_UDP=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #     echo -e "CONFIG_IP_VS_RR=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #     echo -e "CONFIG_IP_VS_NFCT=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #     echo -e "CONFIG_MACVLAN=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #     echo -e "CONFIG_MACVTAP=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #     echo -e "CONFIG_VXLAN=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #     echo -e "CONFIG_BRIDGE_VLAN_FILTERING=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #     echo -e "CONFIG_NET_CLS_CGROUP=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #     echo -e "CONFIG_CGROUP_NET_PRIO=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #     echo -e "CONFIG_BLK_CGROUP=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #     echo -e "CONFIG_BLK_DEV_THROTTLING=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #     echo -e "CONFIG_CFQ_GROUP_IOSCHED=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #     echo -e "CONFIG_HUGETLB_PAGE=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #     echo -e "CONFIG_IPVLAN=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #     echo -e "CONFIG_IPVTAP=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #     echo -e "CONFIG_CGROUP_HUGETLB=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #     echo -e "CONFIG_NET_L3_MASTER_DEV=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
+          cat arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
 
-      #     echo -e "CONFIG_IP6_NF_TARGET_MASQUERADE=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #     echo -e "CONFIG_IP6_NF_NAT=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #     # echo -e "CONFIG_IP_SCTP=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #     echo -e "CONFIG_NFT_CT=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #     echo -e "CONFIG_NFT_FIB_IPV4=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #     echo -e "CONFIG_NFT_FIB_IPV6=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #     echo -e "CONFIG_NFT_FIB=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #     echo -e "CONFIG_NFT_MASQ=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #     echo -e "CONFIG_NFT_NAT=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-      #     echo -e "CONFIG_NF_TABLES=y" >> arch/${{ env.arch }}/configs/${{ env.DEFCONFIG_NAME }}
-
-      - name: "🥸 Spoof Kernel Version Information"
+      # ── 7. 版本伪装（不可修改区域）──
+      - name: 伪装内核版本信息
         working-directory: ${{ env.KERNEL_NAME }}
         run: |
           # 修改 Makefile 中的 EXTRAVERSION
@@ -301,94 +215,240 @@ jobs:
           COMPILER_STR="(Android (6443078 based on r383902) clang version 11.0.1 (https:\/\/android.googlesource.com\/toolchain\/llvm-project b397f81060ce6d701042b782172ed13bee898b79), LLD 11.0.1 (\/buildbot\/tmp\/tmp6_m7QH b397f81060ce6d701042b782172ed13bee898b79))"
           sed -i "s/^COMPILER=.*/COMPILER=\"$COMPILER_STR\"/" scripts/mkcompile_h
 
-      - name: "👍 Make defconfig"
+      # ── 8. 编译内核 ──
+      - name: 生成 defconfig
         working-directory: ${{ env.KERNEL_NAME }}
         env:
-          args: ${{ steps.generate-args.outputs.args }}
-          arch: ${{ steps.generate-args.outputs.ARCH }}
+          CLANG_DIR: "${{ github.workspace }}/proton-clang/bin"
         run: |
-          echo "PATH Variable: $PATH"
-          make ${{ env.args }} ${{ env.DEFCONFIG_NAME }}
+          if [[ "${{ inputs.ccache_enabled }}" == "true" ]]; then
+            CC_CMD="ccache ${CLANG_DIR}/clang"
+          else
+            CC_CMD="${CLANG_DIR}/clang"
+          fi
 
-      - name: "🎶 Build kernel"
+          make -j$(nproc) \
+            O=${{ env.OUT_DIR }} \
+            ARCH=${{ env.ARCH }} \
+            CC="${CC_CMD}" \
+            CROSS_COMPILE="${CLANG_DIR}/aarch64-linux-gnu-" \
+            CROSS_COMPILE_ARM32="${CLANG_DIR}/arm-linux-gnueabi-" \
+            LD="${CLANG_DIR}/ld.lld" \
+            AR="${CLANG_DIR}/llvm-ar" \
+            NM="${CLANG_DIR}/llvm-nm" \
+            OBJCOPY="${CLANG_DIR}/llvm-objcopy" \
+            OBJDUMP="${CLANG_DIR}/llvm-objdump" \
+            READELF="${CLANG_DIR}/llvm-readelf" \
+            STRIP="${CLANG_DIR}/llvm-strip" \
+            OBJSIZE="${CLANG_DIR}/llvm-size" \
+            LDGOLD="${CLANG_DIR}/aarch64-linux-gnu-ld.gold" \
+            LLVM_AR="${CLANG_DIR}/llvm-ar" \
+            LLVM_DIS="${CLANG_DIR}/llvm-dis" \
+            ${{ env.DEFCONFIG_NAME }}
+
+      - name: 编译内核
         working-directory: ${{ env.KERNEL_NAME }}
         env:
-          args: ${{ steps.generate-args.outputs.args }}
-          # KBUILD 环境变量伪装
-          KBUILD_BUILD_USER: "builder"
-          KBUILD_BUILD_HOST: "m1-xm-ota-bd094.bj.idc.xiaomi.com"
-          KBUILD_BUILD_TIMESTAMP: "Thu Nov 10 10:27:37 CST 2022"
-          KBUILD_BUILD_VERSION: "1"
+          CLANG_DIR: "${{ github.workspace }}/proton-clang/bin"
         run: |
-          echo "PATH Variable: $PATH"
-          make ${{ env.args }}
+          if [[ "${{ inputs.ccache_enabled }}" == "true" ]]; then
+            CC_CMD="ccache ${CLANG_DIR}/clang"
+          else
+            CC_CMD="${CLANG_DIR}/clang"
+          fi
 
-      - name: "💛 Upload Image"
-        uses: actions/upload-artifact@v4
-        env:
-          arch: ${{ steps.generate-args.outputs.ARCH }}
+          make -j$(nproc) \
+            O=${{ env.OUT_DIR }} \
+            ARCH=${{ env.ARCH }} \
+            CC="${CC_CMD}" \
+            CROSS_COMPILE="${CLANG_DIR}/aarch64-linux-gnu-" \
+            CROSS_COMPILE_ARM32="${CLANG_DIR}/arm-linux-gnueabi-" \
+            LD="${CLANG_DIR}/ld.lld" \
+            AR="${CLANG_DIR}/llvm-ar" \
+            NM="${CLANG_DIR}/llvm-nm" \
+            OBJCOPY="${CLANG_DIR}/llvm-objcopy" \
+            OBJDUMP="${CLANG_DIR}/llvm-objdump" \
+            READELF="${CLANG_DIR}/llvm-readelf" \
+            STRIP="${CLANG_DIR}/llvm-strip" \
+            OBJSIZE="${CLANG_DIR}/llvm-size" \
+            LDGOLD="${CLANG_DIR}/aarch64-linux-gnu-ld.gold" \
+            LLVM_AR="${CLANG_DIR}/llvm-ar" \
+            LLVM_DIS="${CLANG_DIR}/llvm-dis"
+
+      # ── 9. 保存 ccache ──
+      - name: 保存 ccache 缓存
+        if: inputs.ccache_enabled && (inputs.ccache_update || steps.ccache_restore.outputs.cache-hit != 'true')
+        uses: actions/cache/save@v4
         with:
-          name: Image-${{ env.KERNEL_DEVICE }}-${{ env.KERNEL_NAME }}-${{ env.builddate }}
-          path: ${{ env.OUT_DIR }}/arch/${{ env.arch }}/boot/Image
-          if-no-files-found: ignore
-          retention-days: 7
+          path: ~/.ccache
+          key: ${{ env.CCACHE_KEY }}-${{ runner.os }}-${{ github.ref_name }}
 
-      - name: "💙 Upload Image.gz"
-        uses: actions/upload-artifact@v4
-        env:
-          arch: ${{ steps.generate-args.outputs.ARCH }}
-        with:
-          name: Image.gz-${{ env.KERNEL_DEVICE }}-${{ env.KERNEL_NAME }}-${{ env.builddate }}
-          path: ${{ env.OUT_DIR }}/arch/${{ env.arch }}/boot/Image.gz
-          if-no-files-found: ignore
-          retention-days: 7
-
-      - name: "💜 Upload all"
-        uses: actions/upload-artifact@v4
-        env:
-          arch: ${{ steps.generate-args.outputs.ARCH }}
-        with:
-          name: all-${{ env.KERNEL_DEVICE }}-${{ env.KERNEL_NAME }}-${{ env.builddate }}
-          path: ${{ env.OUT_DIR }}/arch/${{ env.arch }}/boot/
-          if-no-files-found: ignore
-          retention-days: 7
-
-      - name: "❤️ Pack AnyKernel3.zip"
-        if: ${{ env.useAnykernel == 'true' }}
-        env:
-          arch: ${{ steps.generate-args.outputs.ARCH }}
-          anykernel: "${{ env.WORKSPACE }}/${{ env.KERNEL_DEVICE }}-${{ env.KERNEL_NAME }}_${{ env.builddate }}"
+      # ── 10. KPM / KPN 后补丁 ──
+      - name: 应用 KPM/KPN 修补内核
+        if: inputs.kpm_enable != 'false' && inputs.ksu_enabled
         run: |
-          ls -al
+          BOOT_DIR="${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/boot"
+          cd "$BOOT_DIR"
 
-          if [ -e "${{ env.OUT_DIR }}/arch/${{ env.arch }}/boot/Image" ]; then
-            cp -f ${{ env.OUT_DIR }}/arch/${{ env.arch }}/boot/Image ./AnyKernel3/
+          if [[ "${{ inputs.kpm_enable }}" == "builtin" ]]; then
+            echo "正在应用 ReSukiSU 内置 KPM 并修补内核..."
+            curl -LO https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch/releases/latest/download/patch_linux
+            chmod +x patch_linux
+            ./patch_linux
+            rm -f Image
+            mv oImage Image
+          elif [[ "${{ inputs.kpm_enable }}" == "kpn" ]]; then
+            echo "正在应用 KPatch-Next 并修补内核..."
+            wget https://github.com/KernelSU-Next/KPatch-Next/releases/latest/download/kptools-linux
+            wget https://github.com/KernelSU-Next/KPatch-Next/releases/latest/download/kpimg-linux
+            chmod +x ./kptools-linux
+            ./kptools-linux -p -i ./Image -k ./kpimg-linux -o ./oImage
+            rm -f Image
+            mv oImage Image
           fi
-          if [ -e "${{ env.OUT_DIR }}/arch/${{ env.arch }}/boot/Image.gz" ]; then
-            cp -f ${{ env.OUT_DIR }}/arch/${{ env.arch }}/boot/Image.gz ./AnyKernel3/
+
+      # ── 11. 准备产物 ──
+      - name: 校验内核镜像
+        id: prepare_image
+        run: |
+          BOOT_DIR="${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/boot"
+          BUILDDATE="${{ steps.setup_env.outputs.builddate }}"
+          IMAGE_NAME="Image-${{ env.KERNEL_DEVICE }}-${{ env.KERNEL_NAME }}-${BUILDDATE}"
+          echo "image_name=${IMAGE_NAME}" >> $GITHUB_OUTPUT
+
+          if [[ ! -f "${BOOT_DIR}/Image" ]]; then
+            echo "::error::未找到内核镜像文件 (Image)，构建失败"
+            exit 1
           fi
-          if [ -e "${{ env.OUT_DIR }}/arch/${{ env.arch }}/boot/dtbo" ]; then
-            cp -f ${{ env.OUT_DIR }}/arch/${{ env.arch }}/boot/dtbo ./AnyKernel3/
+          echo "内核镜像校验通过: ${BOOT_DIR}/Image"
+
+      - name: 打包 AnyKernel3
+        if: inputs.use_anykernel
+        id: pack_anykernel
+        run: |
+          BOOT_DIR="${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/boot"
+          BUILDDATE="${{ steps.setup_env.outputs.builddate }}"
+          AK3_NAME="${{ env.KERNEL_DEVICE }}-${{ env.KERNEL_NAME }}_${BUILDDATE}"
+
+          # 复制内核镜像到 AnyKernel3
+          if [ -f "${BOOT_DIR}/Image" ]; then
+            cp -f "${BOOT_DIR}/Image" ./AnyKernel3/
           fi
-          if [ -e "${{ env.OUT_DIR }}/arch/${{ env.arch }}/boot/dtbo.img" ]; then
-            cp -f ${{ env.OUT_DIR }}/arch/${{ env.arch }}/boot/dtbo.img ./AnyKernel3/
+          if [ -f "${BOOT_DIR}/Image.gz" ]; then
+            cp -f "${BOOT_DIR}/Image.gz" ./AnyKernel3/
+          fi
+          if [ -f "${BOOT_DIR}/dtbo" ]; then
+            cp -f "${BOOT_DIR}/dtbo" ./AnyKernel3/
+          fi
+          if [ -f "${BOOT_DIR}/dtbo.img" ]; then
+            cp -f "${BOOT_DIR}/dtbo.img" ./AnyKernel3/
           fi
 
           cd AnyKernel3/
-          zip -q -r "${{ env.anykernel }}.zip" *
+          zip -q -r "${{ github.workspace }}/${AK3_NAME}.zip" *
+          echo "ak3name=${AK3_NAME}.zip" >> $GITHUB_OUTPUT
 
-      - name: "💾 Upload AnyKernel3 image => (${{ env.builddate }})"
+      # ── 12. 上传产物 ──
+      - name: 上传 AnyKernel3 刷入包
+        if: inputs.use_anykernel
         uses: actions/upload-artifact@v4
-        if: ${{ env.useAnykernel == 'true' }}
         with:
-          name: "${{ env.KERNEL_DEVICE }}-${{ env.KERNEL_NAME }}_${{ env.builddate }}"
-          path: AnyKernel3/*
+          name: ${{ steps.pack_anykernel.outputs.ak3name }}
+          path: ${{ github.workspace }}/${{ steps.pack_anykernel.outputs.ak3name }}
+          if-no-files-found: error
+          retention-days: 7
 
-      - name: 🧧 Create GitHub Release => (${{ env.builddate }})
-        continue-on-error: true
-        uses: softprops/action-gh-release@v1
-        if: ${{ env.useAnykernel == 'true' && env.release == 'true' }}
+      - name: 上传 Image
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: v${{ env.builddate }}.${{ github.run_number }}
-          files: "${{ env.WORKSPACE }}/${{ env.KERNEL_DEVICE }}-${{ env.KERNEL_NAME }}_${{ env.builddate }}.zip"
-          generate_release_notes: true
+          name: ${{ steps.prepare_image.outputs.image_name }}
+          path: ${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/boot/Image
+          if-no-files-found: error
+          retention-days: 7
+
+  # ============================================================
+  #  发布 Release
+  # ============================================================
+  release:
+    name: 发布 Release
+    if: inputs.release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+
+    steps:
+      - name: 下载构建产物
+        uses: actions/download-artifact@v4
+        with:
+          path: ./release_files
+
+      - name: 设置发布环境变量
+        run: |
+          TIME="$(TZ='Asia/Shanghai' date +'%y%m%d%H%M%S')"
+          TIME_FORM="$(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S')"
+          TAG_HEAD="chopin-build"
+
+          if [[ -n "${{ inputs.kernel_suffix }}" ]]; then
+            FULL_VERSION="${{ env.KERNEL_NAME }}-${{ inputs.kernel_suffix }}"
+          else
+            FULL_VERSION="${{ env.KERNEL_NAME }}"
+          fi
+
+          # KSU 状态
+          if [[ "${{ inputs.ksu_enabled }}" == "true" ]]; then
+            KSU_STATUS="ReSukiSU (Manual Hook)"
+          else
+            KSU_STATUS="未集成"
+          fi
+
+          echo "TIME=$TIME" >> $GITHUB_ENV
+          echo "TIME_FORM=$TIME_FORM" >> $GITHUB_ENV
+          echo "TAG_HEAD=$TAG_HEAD" >> $GITHUB_ENV
+          echo "FULL_VERSION=$FULL_VERSION" >> $GITHUB_ENV
+          echo "KSU_STATUS=$KSU_STATUS" >> $GITHUB_ENV
+
+      - name: 创建 Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cat << 'EOF' > release_notes.md
+          ### 构建信息
+          - 设备: chopin (Redmi K40 Gaming / POCO F3 GT)
+          - 内核版本: ${{ env.FULL_VERSION }}
+          - 编译时间: ${{ env.TIME_FORM }}
+          - KernelSU: ${{ env.KSU_STATUS }}
+          - KPM: ${{ inputs.kpm_enable }}
+          - AnyKernel3 打包: ${{ inputs.use_anykernel }}
+          - 伪装信息: ${{ env.KBUILD_BUILD_USER }}@${{ env.KBUILD_BUILD_HOST }}
+          - 伪装时间: ${{ env.KBUILD_BUILD_TIMESTAMP }}
+          EOF
+
+          # 收集所有发布文件
+          shopt -s nullglob
+          RELEASE_FILES=()
+
+          # AnyKernel3 zip
+          for f in ./release_files/*/*.zip; do
+            RELEASE_FILES+=("$f")
+          done
+
+          # Image 文件
+          for f in ./release_files/*/Image; do
+            RELEASE_FILES+=("$f")
+          done
+
+          if [ ${#RELEASE_FILES[@]} -eq 0 ]; then
+            echo "::error::未找到任何可发布的文件"
+            exit 1
+          fi
+
+          echo "即将发布以下文件:"
+          printf '  - %s\n' "${RELEASE_FILES[@]}"
+
+          gh release create "${{ env.TAG_HEAD }}-${{ env.TIME }}" \
+            --repo "${{ github.repository }}" \
+            --title "${{ env.TAG_HEAD }}-${{ env.FULL_VERSION }}" \
+            --notes-file release_notes.md \
+            "${RELEASE_FILES[@]}"
