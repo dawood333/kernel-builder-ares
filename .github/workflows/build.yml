@@ -4,11 +4,11 @@ env:
   TZ: Asia/Shanghai
 
   # ── 内核源码 ──
-  KERNEL_NAME: Chopin-AndroidS-KVM-Proton-release
-  KERNEL_REPO: https://github.com/seriaTvT/kernel_xiaomi_chopin_android_S
-  KERNEL_BRANCH: ReSukiSU
+  KERNEL_NAME: Chopin-A16-KVM-Proton-release
+  KERNEL_REPO: https://github.com/Seria-Kernel-Builds/kernel_xiaomi_mt6893
+  KERNEL_BRANCH: chopin_kvm
   KERNEL_DEVICE: chopin
-  DEFCONFIG_NAME: chopin_userkvm_defconfig
+  DEFCONFIG_NAME: chopin_defconfig
 
   # ── 工具链 (Proton Clang) ──
   CLANG_REPO: https://github.com/kdrag0n/proton-clang
@@ -30,7 +30,7 @@ env:
   KBUILD_BUILD_VERSION: "1"
 
   # ── ccache ──
-  CCACHE_KEY: ccache-chopin-4.14
+  CCACHE_KEY: ccache-chopin-4.14-a16
 
 on:
   workflow_dispatch:
@@ -57,6 +57,12 @@ on:
         type: boolean
         default: true
 
+      fake_enabled:
+        description: '是否进行编译伪装'
+        required: true
+        type: boolean
+        default: false
+        
       ccache_enabled:
         description: '是否启用 ccache 加速编译'
         required: true
@@ -202,6 +208,7 @@ jobs:
 
       # ── 7. 版本伪装（不可修改区域）──
       - name: 伪装内核版本信息
+        if: inputs.fake_enabled
         working-directory: ${{ env.KERNEL_NAME }}
         run: |
           # 修改 Makefile 中的 EXTRAVERSION
