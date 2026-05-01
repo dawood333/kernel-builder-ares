@@ -120,14 +120,23 @@ jobs:
             ${{ env.KERNEL_REPO }} \
             ${{ env.KERNEL_NAME }}
 
-      # ── 3. 获取工具链 ──
-      - name: 获取工具链 (Proton Clang)
+      # ── 3. 获取工具链 (AOSP Clang 12 & GCC 4.9) ──
+      - name: 获取工具链
         run: |
-          git clone --recursive --depth=1 -j $(nproc) \
-            --branch ${{ env.CLANG_BRANCH }} \
-            ${{ env.CLANG_REPO }} \
-            ${{ env.CLANG_NAME }}
-          echo "${{ github.workspace }}/${{ env.CLANG_NAME }}/bin" >> $GITHUB_PATH
+          mkdir -p aosp-clang
+          # 下载官方 AOSP Clang 12.0.5 (r416183b)
+          wget -qO clang.tar.gz https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/bd96dfe349c962681f0e5388af874c771ef96670/clang-r416183b.tar.gz
+          tar -xf clang.tar.gz -C aosp-clang
+          
+          # 克隆 AOSP GCC 4.9 (Linux 4.14 汇编与部分链接依赖)
+          git clone --depth=1 https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9 aarch64-gcc
+          git clone --depth=1 https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9 arm-gcc
+          
+          # 导入环境变量
+          echo "${{ github.workspace }}/aosp-clang/bin" >> $GITHUB_PATH
+          echo "CLANG_DIR=${{ github.workspace }}/aosp-clang/bin" >> $GITHUB_ENV
+          echo "GCC_64_DIR=${{ github.workspace }}/aarch64-gcc/bin" >> $GITHUB_ENV
+          echo "GCC_32_DIR=${{ github.workspace }}/arm-gcc/bin" >> $GITHUB_ENV
 
       # ── 4. 准备 AnyKernel3 ──
       - name: 准备 AnyKernel3
@@ -229,29 +238,25 @@ jobs:
           CLANG_DIR: "${{ github.workspace }}/proton-clang/bin"
         run: |
           if [[ "${{ inputs.ccache_enabled }}" == "true" ]]; then
-            CC_CMD="ccache ${CLANG_DIR}/clang"
+            CC_CMD="ccache clang"
           else
-            CC_CMD="${CLANG_DIR}/clang"
+            CC_CMD="clang"
           fi
 
           make -j$(nproc) \
             O=${{ env.OUT_DIR }} \
             ARCH=${{ env.ARCH }} \
             CC="${CC_CMD}" \
-            CROSS_COMPILE="${CLANG_DIR}/aarch64-linux-gnu-" \
-            CROSS_COMPILE_ARM32="${CLANG_DIR}/arm-linux-gnueabi-" \
-            LD="${CLANG_DIR}/ld.lld" \
-            AR="${CLANG_DIR}/llvm-ar" \
-            NM="${CLANG_DIR}/llvm-nm" \
-            OBJCOPY="${CLANG_DIR}/llvm-objcopy" \
-            OBJDUMP="${CLANG_DIR}/llvm-objdump" \
-            READELF="${CLANG_DIR}/llvm-readelf" \
-            STRIP="${CLANG_DIR}/llvm-strip" \
-            OBJSIZE="${CLANG_DIR}/llvm-size" \
-            LDGOLD="${CLANG_DIR}/aarch64-linux-gnu-ld.gold" \
-            LLVM_AR="${CLANG_DIR}/llvm-ar" \
-            LLVM_DIS="${CLANG_DIR}/llvm-dis" \
-            ${{ env.DEFCONFIG_NAME }}
+            CROSS_COMPILE="${{ env.GCC_64_DIR }}/aarch64-linux-android-" \
+            CROSS_COMPILE_ARM32="${{ env.GCC_32_DIR }}/arm-linux-androideabi-" \
+            LD=ld.lld \
+            AR=llvm-ar \
+            NM=llvm-nm \
+            OBJCOPY=llvm-objcopy \
+            OBJDUMP=llvm-objdump \
+            READELF=llvm-readelf \
+            STRIP=llvm-strip \
+            OBJSIZE=llvm-size
 
       - name: 编译内核
         working-directory: ${{ env.KERNEL_NAME }}
