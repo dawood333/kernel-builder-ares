@@ -234,8 +234,6 @@ jobs:
       # ── 8. 编译内核 ──
       - name: 生成 defconfig
         working-directory: ${{ env.KERNEL_NAME }}
-        env:
-          CLANG_DIR: "${{ github.workspace }}/proton-clang/bin"
         run: |
           if [[ "${{ inputs.ccache_enabled }}" == "true" ]]; then
             CC_CMD="ccache clang"
@@ -247,6 +245,33 @@ jobs:
             O=${{ env.OUT_DIR }} \
             ARCH=${{ env.ARCH }} \
             CC="${CC_CMD}" \
+            CLANG_TRIPLE=aarch64-linux-gnu- \
+            CROSS_COMPILE="${{ env.GCC_64_DIR }}/aarch64-linux-android-" \
+            CROSS_COMPILE_ARM32="${{ env.GCC_32_DIR }}/arm-linux-androideabi-" \
+            LD=ld.lld \
+            AR=llvm-ar \
+            NM=llvm-nm \
+            OBJCOPY=llvm-objcopy \
+            OBJDUMP=llvm-objdump \
+            READELF=llvm-readelf \
+            STRIP=llvm-strip \
+            OBJSIZE=llvm-size \
+            ${{ env.DEFCONFIG_NAME }}
+
+      - name: 编译内核
+        working-directory: ${{ env.KERNEL_NAME }}
+        run: |
+          if [[ "${{ inputs.ccache_enabled }}" == "true" ]]; then
+            CC_CMD="ccache clang"
+          else
+            CC_CMD="clang"
+          fi
+
+          make -j$(nproc) \
+            O=${{ env.OUT_DIR }} \
+            ARCH=${{ env.ARCH }} \
+            CC="${CC_CMD}" \
+            CLANG_TRIPLE=aarch64-linux-gnu- \
             CROSS_COMPILE="${{ env.GCC_64_DIR }}/aarch64-linux-android-" \
             CROSS_COMPILE_ARM32="${{ env.GCC_32_DIR }}/arm-linux-androideabi-" \
             LD=ld.lld \
@@ -257,35 +282,6 @@ jobs:
             READELF=llvm-readelf \
             STRIP=llvm-strip \
             OBJSIZE=llvm-size
-
-      - name: 编译内核
-        working-directory: ${{ env.KERNEL_NAME }}
-        env:
-          CLANG_DIR: "${{ github.workspace }}/proton-clang/bin"
-        run: |
-          if [[ "${{ inputs.ccache_enabled }}" == "true" ]]; then
-            CC_CMD="ccache ${CLANG_DIR}/clang"
-          else
-            CC_CMD="${CLANG_DIR}/clang"
-          fi
-
-          make -j$(nproc) \
-            O=${{ env.OUT_DIR }} \
-            ARCH=${{ env.ARCH }} \
-            CC="${CC_CMD}" \
-            CROSS_COMPILE="${CLANG_DIR}/aarch64-linux-gnu-" \
-            CROSS_COMPILE_ARM32="${CLANG_DIR}/arm-linux-gnueabi-" \
-            LD="${CLANG_DIR}/ld.lld" \
-            AR="${CLANG_DIR}/llvm-ar" \
-            NM="${CLANG_DIR}/llvm-nm" \
-            OBJCOPY="${CLANG_DIR}/llvm-objcopy" \
-            OBJDUMP="${CLANG_DIR}/llvm-objdump" \
-            READELF="${CLANG_DIR}/llvm-readelf" \
-            STRIP="${CLANG_DIR}/llvm-strip" \
-            OBJSIZE="${CLANG_DIR}/llvm-size" \
-            LDGOLD="${CLANG_DIR}/aarch64-linux-gnu-ld.gold" \
-            LLVM_AR="${CLANG_DIR}/llvm-ar" \
-            LLVM_DIS="${CLANG_DIR}/llvm-dis"
 
       # ── 9. 保存 ccache ──
       - name: 保存 ccache 缓存
