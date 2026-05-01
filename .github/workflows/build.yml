@@ -196,6 +196,10 @@ jobs:
 
           curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash -s main
 
+          # --- 修复 4.14 向后移植带来的 pids 数组兼容性问题 ---
+          echo "正在修复 super_access.c 中的 task_struct 兼容性..."
+          sed -i 's/DEFINE_MEMBER(task_struct, pids\[PIDTYPE_PID\].pid)/DEFINE_MEMBER(task_struct, thread_pid)/g' KernelSU/kernel/kpm/super_access.c
+
           echo -e "CONFIG_KSU=y" >> arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
           echo -e "CONFIG_KSU_MANUAL_HOOK=y" >> arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
           echo -e "CONFIG_KSU_MANUAL_HOOK_AUTO_INPUT_HOOK=y" >> arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
