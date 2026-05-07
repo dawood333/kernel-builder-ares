@@ -6,7 +6,7 @@ env:
   # ── 内核源码 ──
   KERNEL_NAME: Chopin-A16-KVM-Proton-release
   KERNEL_REPO: https://github.com/Seria-Kernel-Builds/kernel_xiaomi_mt6893
-  KERNEL_BRANCH: chopin_kvm
+  KERNEL_BRANCH: chopin_kvm_oc
   KERNEL_DEVICE: chopin
   DEFCONFIG_NAME: chopin_defconfig
 
