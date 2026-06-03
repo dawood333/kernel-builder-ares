@@ -26,7 +26,7 @@ env:
   # ── KBUILD 伪装配置 ──
   KBUILD_BUILD_USER: builder
   KBUILD_BUILD_HOST: android-builder
-  KBUILD_BUILD_TIMESTAMP: "Thu Apr 30 21:20:37 CST 2026"
+  KBUILD_BUILD_TIMESTAMP: "Fri Mar 28 13:14:00 CST 2025"
   KBUILD_BUILD_VERSION: "1"
   FAKE_EXTRAVERSION: "-g88e8616a5866"
   FAKE_COMPILER: "(Android (7284624, based on r416183b) clang version 12.0.5 (https://android.googlesource.com/toolchain/llvm-project c935d99d7cf2016289302412d708641d52d2f7ee), LLD 12.0.5 (/buildbot/src/android/llvm-toolchain/out/llvm-project/lld c935d99d7cf2016289302412d708641d52d2f7ee))"
