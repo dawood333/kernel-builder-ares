@@ -6,7 +6,7 @@ env:
   # ── 内核源码 ──
   KERNEL_NAME: Chopin-A16-KVM-Proton-release
   KERNEL_REPO: https://github.com/Seria-Kernel-Builds/kernel_xiaomi_mt6893
-  KERNEL_BRANCH: chopin_kvm
+  KERNEL_BRANCH: ${{ inputs.overclock && 'chopin_kvm_oc' || 'chopin_kvm' }}
   KERNEL_DEVICE: chopin
   DEFCONFIG_NAME: chopin_defconfig
 
@@ -37,21 +37,17 @@ env:
 on:
   workflow_dispatch:
     inputs:
+      overclock:
+        description: '是否使用超频内核分支 (true: chopin_kvm_oc, false: chopin_kvm)'
+        required: true
+        type: boolean
+        default: true
+
       ksu_enabled:
         description: '是否集成 ReSukiSU (Manual Hook)'
         required: true
         type: boolean
         default: true
-
-      kpm_enable:
-        description: 'KPM模式 (false-关闭, builtin-使用ReSukiSU内置KPM, kpn-使用独立KPatch-Next实现)'
-        required: true
-        type: choice
-        default: 'builtin'
-        options:
-          - 'false'
-          - 'builtin'
-          - 'kpn'
 
       use_anykernel:
         description: '是否使用 AnyKernel3 打包刷入包（关闭时仅上传 Image）'
@@ -99,6 +95,7 @@ jobs:
     outputs:
       ak3name: ${{ steps.pack_anykernel.outputs.ak3name }}
       image_name: ${{ steps.prepare_image.outputs.image_name }}
+      dtb_name: ${{ steps.prepare_image.outputs.dtb_name }}
       builddate: ${{ steps.setup_env.outputs.builddate }}
     steps:
 
@@ -210,10 +207,6 @@ jobs:
           echo -e "CONFIG_KALLSYMS_ALL=y" >> arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
           echo -e "CONFIG_KALLSYMS_ABSOLUTE_PERCPU=y" >> arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
 
-          # KPM 内核配置仅在 builtin 模式下需要编译时启用
-          if [[ "${{ inputs.kpm_enable }}" == "builtin" ]]; then
-            echo -e "CONFIG_KPM=y" >> arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
-          fi
 
           cat arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
 
@@ -259,7 +252,7 @@ jobs:
             OBJSIZE=llvm-size \
             ${{ env.DEFCONFIG_NAME }}
 
-      - name: 编译内核
+      - name: 编译内核与设备树
         working-directory: ${{ env.KERNEL_NAME }}
         run: |
           if [[ "${{ inputs.ccache_enabled }}" == "true" ]]; then
@@ -282,7 +275,8 @@ jobs:
             OBJDUMP=llvm-objdump \
             READELF=llvm-readelf \
             STRIP=llvm-strip \
-            OBJSIZE=llvm-size
+            OBJSIZE=llvm-size \
+            Image dtbs
 
       # ── 9. 保存 ccache ──
       - name: 保存 ccache 缓存
@@ -292,44 +286,31 @@ jobs:
           path: ~/.ccache
           key: ${{ env.CCACHE_KEY }}-${{ runner.os }}-${{ github.ref_name }}
 
-      # ── 10. KPM / KPN 后补丁 ──
-      - name: 应用 KPM/KPN 修补内核
-        if: inputs.kpm_enable != 'false' && inputs.ksu_enabled
-        run: |
-          BOOT_DIR="${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/boot"
-          cd "$BOOT_DIR"
-
-          if [[ "${{ inputs.kpm_enable }}" == "builtin" ]]; then
-            echo "正在应用 ReSukiSU 内置 KPM 并修补内核..."
-            curl -LO https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch/releases/latest/download/patch_linux
-            chmod +x patch_linux
-            ./patch_linux
-            rm -f Image
-            mv oImage Image
-          elif [[ "${{ inputs.kpm_enable }}" == "kpn" ]]; then
-            echo "正在应用 KPatch-Next 并修补内核..."
-            wget https://github.com/KernelSU-Next/KPatch-Next/releases/latest/download/kptools-linux
-            wget https://github.com/KernelSU-Next/KPatch-Next/releases/latest/download/kpimg-linux
-            chmod +x ./kptools-linux
-            ./kptools-linux -p -i ./Image -k ./kpimg-linux -o ./oImage
-            rm -f Image
-            mv oImage Image
-          fi
-
       # ── 11. 准备产物 ──
-      - name: 校验内核镜像
+      - name: 校验内核与设备树镜像
         id: prepare_image
         run: |
           BOOT_DIR="${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/boot"
           BUILDDATE="${{ steps.setup_env.outputs.builddate }}"
           IMAGE_NAME="Image-${{ env.KERNEL_DEVICE }}-${{ env.KERNEL_NAME }}-${BUILDDATE}"
+          DTB_NAME="dtb-${{ env.KERNEL_DEVICE }}-${{ env.KERNEL_NAME }}-${BUILDDATE}"
           echo "image_name=${IMAGE_NAME}" >> $GITHUB_OUTPUT
+          echo "dtb_name=${DTB_NAME}" >> $GITHUB_OUTPUT
 
           if [[ ! -f "${BOOT_DIR}/Image" ]]; then
             echo "::error::未找到内核镜像文件 (Image)，构建失败"
             exit 1
           fi
           echo "内核镜像校验通过: ${BOOT_DIR}/Image"
+
+          # 寻找编译出的所有 dtb 文件并合并为单文件 dtb
+          find "${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/boot/dts/" -name "*.dtb" -type f -exec cat {} + > "${BOOT_DIR}/dtb"
+
+          if [[ ! -s "${BOOT_DIR}/dtb" ]]; then
+            echo "::error::未找到编译出的 DTB 文件，构建失败"
+            exit 1
+          fi
+          echo "DTB 文件校验及合并通过: ${BOOT_DIR}/dtb"
 
       - name: 打包 AnyKernel3
         if: inputs.use_anykernel
@@ -339,12 +320,15 @@ jobs:
           BUILDDATE="${{ steps.setup_env.outputs.builddate }}"
           AK3_NAME="${{ env.KERNEL_DEVICE }}-${{ env.KERNEL_NAME }}_${BUILDDATE}"
 
-          # 复制内核镜像到 AnyKernel3
+          # 复制内核与设备树镜像到 AnyKernel3
           if [ -f "${BOOT_DIR}/Image" ]; then
             cp -f "${BOOT_DIR}/Image" ./AnyKernel3/
           fi
           if [ -f "${BOOT_DIR}/Image.gz" ]; then
             cp -f "${BOOT_DIR}/Image.gz" ./AnyKernel3/
+          fi
+          if [ -f "${BOOT_DIR}/dtb" ]; then
+            cp -f "${BOOT_DIR}/dtb" ./AnyKernel3/
           fi
           if [ -f "${BOOT_DIR}/dtbo" ]; then
             cp -f "${BOOT_DIR}/dtbo" ./AnyKernel3/
@@ -372,6 +356,14 @@ jobs:
         with:
           name: ${{ steps.prepare_image.outputs.image_name }}
           path: ${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/boot/Image
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: 上传 dtb
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.prepare_image.outputs.dtb_name }}
+          path: ${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/boot/dtb
           if-no-files-found: error
           retention-days: 7
 
@@ -428,7 +420,6 @@ jobs:
           - 内核版本: ${{ env.FULL_VERSION }}
           - 编译时间: ${{ env.TIME_FORM }}
           - KernelSU: ${{ env.KSU_STATUS }}
-          - KPM: ${{ inputs.kpm_enable }}
           - AnyKernel3 打包: ${{ inputs.use_anykernel }}
           - 伪装信息: ${{ env.KBUILD_BUILD_USER }}@${{ env.KBUILD_BUILD_HOST }}
           - 伪装时间: ${{ env.KBUILD_BUILD_TIMESTAMP }}
@@ -445,6 +436,11 @@ jobs:
 
           # Image 文件
           for f in ./release_files/*/Image; do
+            RELEASE_FILES+=("$f")
+          done
+
+          # dtb 文件
+          for f in ./release_files/*/dtb; do
             RELEASE_FILES+=("$f")
           done
 
