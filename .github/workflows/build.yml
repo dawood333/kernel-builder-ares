@@ -10,10 +10,9 @@ env:
   KERNEL_DEVICE: chopin
   DEFCONFIG_NAME: chopin_defconfig
 
-  # ── 工具链 (Proton Clang) ──
-  CLANG_REPO: https://github.com/kdrag0n/proton-clang
-  CLANG_BRANCH: master
-  CLANG_NAME: proton-clang
+  # ── 工具链 ──
+  # 实际工具链（AOSP Clang 12.0.5 r416183b + GCC 4.9）在“获取工具链”步骤中下载，
+  # 此处不再声明独立的 CLANG_* 变量以免与实际使用脱节。
 
   # ── AnyKernel3 ──
   ANYKERNEL_REPO: https://github.com/osm0sis/AnyKernel3
@@ -133,11 +132,6 @@ jobs:
   build:
     name: 构建内核
     runs-on: ubuntu-22.04
-    outputs:
-      ak3name: ${{ steps.pack_anykernel.outputs.ak3name }}
-      image_name: ${{ steps.prepare_image.outputs.image_name }}
-      dtb_name: ${{ steps.prepare_image.outputs.dtb_name }}
-      builddate: ${{ steps.setup_env.outputs.builddate }}
     steps:
 
       # ── 1. 初始化构建环境 ──
@@ -174,7 +168,6 @@ jobs:
           
           # 导入环境变量
           echo "${{ github.workspace }}/aosp-clang/bin" >> $GITHUB_PATH
-          echo "CLANG_DIR=${{ github.workspace }}/aosp-clang/bin" >> $GITHUB_ENV
           echo "GCC_64_DIR=${{ github.workspace }}/aarch64-gcc/bin" >> $GITHUB_ENV
           echo "GCC_32_DIR=${{ github.workspace }}/arm-gcc/bin" >> $GITHUB_ENV
 
@@ -218,7 +211,8 @@ jobs:
           echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
 
       - name: 载入 ccache 缓存
-        if: inputs.ccache_enabled
+        # 更新缓存时跳过恢复，确保从空缓存重建（避免旧对象残留）
+        if: inputs.ccache_enabled && !inputs.ccache_update
         uses: actions/cache@v4
         id: ccache_restore
         with:
@@ -413,9 +407,16 @@ jobs:
           # 禁用 Git 自动追加版本号
           sed -i '2i exit 0' scripts/setlocalversion
 
-          # 伪装编译器字符串 (scripts/mkcompile_h COMPILER)
-          ESCAPED_COMPILER=$(printf '%s\n' "${FAKE_COMPILER}" | sed 's/[&/\\]/\\&/g')
-          sed -i "s/^COMPILER=.*/COMPILER=\"${ESCAPED_COMPILER}\"/" scripts/mkcompile_h
+          # 伪装编译器字符串 (scripts/mkcompile_h 的 LINUX_COMPILER)
+          # 4.14 的 mkcompile_h 没有 COMPILER= 变量，LINUX_COMPILER 由
+          # "$CC_VERSION, $LD_VERSION" 拼接而成，这里直接替换该拼接串。
+          # （以 | 作为 sed 分隔符，因此仅需转义 | & \）
+          ESCAPED_COMPILER=$(printf '%s\n' "${FAKE_COMPILER}" | sed 's/[&|\\]/\\&/g')
+          if ! grep -q '"\$CC_VERSION, \$LD_VERSION"' scripts/mkcompile_h; then
+            echo "::error::未在 scripts/mkcompile_h 找到预期的 LINUX_COMPILER 拼接串，伪装编译器失败"
+            exit 1
+          fi
+          sed -i "s|\"\$CC_VERSION, \$LD_VERSION\"|\"${ESCAPED_COMPILER}\"|" scripts/mkcompile_h
 
       # ── 8. 编译内核 ──
       - name: 生成 defconfig
