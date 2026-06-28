@@ -24,10 +24,9 @@ env:
   OUT_DIR: "${{ github.workspace }}/out"
 
   # ── KBUILD 伪装配置 ──
-  KBUILD_BUILD_USER: ${{ inputs.kbuild_build_user }}
-  KBUILD_BUILD_HOST: ${{ inputs.kbuild_build_host }}
-  KBUILD_BUILD_TIMESTAMP: ${{ inputs.kbuild_build_timestamp }}
-  KBUILD_BUILD_VERSION: ${{ inputs.kbuild_build_version }}
+  # 注意：KBUILD_BUILD_USER/HOST/TIMESTAMP/VERSION 会被内核构建过程直接读取，
+  # 因此不能在此处无条件导出（否则即使关闭伪装也会生效）。
+  # 这些变量仅在 fake_enabled 时由“伪装内核版本信息”步骤写入 $GITHUB_ENV。
   FAKE_EXTRAVERSION: ${{ inputs.fake_extraversion }}
   FAKE_COMPILER: ${{ inputs.fake_compiler }}
 
@@ -401,6 +400,13 @@ jobs:
         if: inputs.fake_enabled
         working-directory: ${{ env.KERNEL_NAME }}
         run: |
+          # 仅在伪装开启时，将 KBUILD_BUILD_* 写入后续步骤的环境
+          # （内核构建会直接读取这些变量；关闭伪装时不写入，从而保留真实环境信息）
+          echo "KBUILD_BUILD_USER=${{ inputs.kbuild_build_user }}" >> "$GITHUB_ENV"
+          echo "KBUILD_BUILD_HOST=${{ inputs.kbuild_build_host }}" >> "$GITHUB_ENV"
+          echo "KBUILD_BUILD_TIMESTAMP=${{ inputs.kbuild_build_timestamp }}" >> "$GITHUB_ENV"
+          echo "KBUILD_BUILD_VERSION=${{ inputs.kbuild_build_version }}" >> "$GITHUB_ENV"
+
           # 修改 Makefile 中的 EXTRAVERSION
           sed -i "s/^EXTRAVERSION =.*/EXTRAVERSION = ${FAKE_EXTRAVERSION}/" Makefile
 
@@ -611,12 +617,26 @@ jobs:
             DS_STATUS="未集成"
           fi
 
+          # 伪装信息：仅在开启伪装时展示伪装值，否则标注为真实环境
+          if [[ "${{ inputs.fake_enabled }}" == "true" ]]; then
+            FAKE_INFO="${{ inputs.kbuild_build_user }}@${{ inputs.kbuild_build_host }}"
+            FAKE_TIME="${{ inputs.kbuild_build_timestamp }}"
+            FAKE_VER="${{ inputs.kbuild_build_version }}"
+          else
+            FAKE_INFO="未伪装（真实环境）"
+            FAKE_TIME="未伪装（真实环境）"
+            FAKE_VER="未伪装（真实环境）"
+          fi
+
           echo "TIME=$TIME" >> $GITHUB_ENV
           echo "TIME_FORM=$TIME_FORM" >> $GITHUB_ENV
           echo "TAG_HEAD=$TAG_HEAD" >> $GITHUB_ENV
           echo "FULL_VERSION=$FULL_VERSION" >> $GITHUB_ENV
           echo "KSU_STATUS=$KSU_STATUS" >> $GITHUB_ENV
           echo "DS_STATUS=$DS_STATUS" >> $GITHUB_ENV
+          echo "FAKE_INFO=$FAKE_INFO" >> $GITHUB_ENV
+          echo "FAKE_TIME=$FAKE_TIME" >> $GITHUB_ENV
+          echo "FAKE_VER=$FAKE_VER" >> $GITHUB_ENV
 
       - name: 创建 Release
         env:
@@ -633,9 +653,9 @@ jobs:
           - AnyKernel3 打包: ${{ inputs.use_anykernel }}
           - CCache 加速: ${{ inputs.ccache_enabled }}
           - 伪装启用: ${{ inputs.fake_enabled }}
-          - 伪装信息: ${{ env.KBUILD_BUILD_USER }}@${{ env.KBUILD_BUILD_HOST }}
-          - 伪装时间: ${{ env.KBUILD_BUILD_TIMESTAMP }}
-          - 伪装版本: ${{ env.KBUILD_BUILD_VERSION }}
+          - 伪装信息: ${{ env.FAKE_INFO }}
+          - 伪装时间: ${{ env.FAKE_TIME }}
+          - 伪装版本: ${{ env.FAKE_VER }}
           EOF
 
           # 收集所有发布文件
