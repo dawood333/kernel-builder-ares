@@ -207,18 +207,24 @@ jobs:
       - name: 配置 ccache
         if: inputs.ccache_enabled
         run: |
-          ccache -o compression=false -o cache_dir=$HOME/.ccache
+          # 开启压缩：CI 上 CPU 相对廉价，而仓库缓存有 10GB 上限，
+          # 压缩可显著减小缓存体积与上传/恢复耗时。
+          ccache -o compression=true -o cache_dir=$HOME/.ccache
           echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
 
       - name: 载入 ccache 缓存
         # 更新缓存时跳过恢复，确保从空缓存重建（避免旧对象残留）
+        # 使用 restore（只恢复不保存），由后续独立的 save 步骤负责写回，避免重复保存。
         if: inputs.ccache_enabled && !inputs.ccache_update
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         id: ccache_restore
         with:
           path: ~/.ccache
-          key: ${{ env.CCACHE_KEY }}-${{ runner.os }}-${{ github.ref_name }}
+          # 主键带 run_id，保证每次构建都写入一份新缓存（不会因精确命中而冻结）；
+          # restore-keys 负责回退到同分支/同系统下最近一次的缓存。
+          key: ${{ env.CCACHE_KEY }}-${{ runner.os }}-${{ github.ref_name }}-${{ github.run_id }}
           restore-keys: |
+            ${{ env.CCACHE_KEY }}-${{ runner.os }}-${{ github.ref_name }}-
             ${{ env.CCACHE_KEY }}-${{ runner.os }}-
             ${{ env.CCACHE_KEY }}-
 
@@ -228,11 +234,20 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "正在清除仓库中的旧 ccache 缓存..."
-          CACHE_KEY="${{ env.CCACHE_KEY }}-${{ runner.os }}-${{ github.ref_name }}"
-          if gh cache delete "$CACHE_KEY" -R ${{ github.repository }}; then
-            echo "成功删除旧的 ccache 缓存！"
+          # 缓存主键带有 run_id 后缀，故按分支前缀枚举并逐个删除。
+          PREFIX="${{ env.CCACHE_KEY }}-${{ runner.os }}-${{ github.ref_name }}-"
+          mapfile -t KEYS < <(gh cache list -R ${{ github.repository }} \
+            --key "$PREFIX" --limit 100 --json key --jq '.[].key')
+          if [ ${#KEYS[@]} -eq 0 ]; then
+            echo "未找到匹配前缀的旧缓存（前缀: $PREFIX）。"
           else
-            echo "旧缓存不存在或已被清理。"
+            for k in "${KEYS[@]}"; do
+              if gh cache delete "$k" -R ${{ github.repository }}; then
+                echo "成功删除旧缓存: $k"
+              else
+                echo "删除失败或已被清理: $k"
+              fi
+            done
           fi
 
       # ── 6. 集成 ReSukiSU ──
@@ -455,6 +470,8 @@ jobs:
         run: |
           if [[ "${{ inputs.ccache_enabled }}" == "true" ]]; then
             CC_CMD="ccache clang"
+            # 归零统计计数器，便于在构建结束后观察本次命中率
+            ccache -z
           else
             CC_CMD="clang"
           fi
@@ -481,13 +498,19 @@ jobs:
             OBJSIZE=llvm-size \
             Image dtbs
 
+      - name: 输出 ccache 统计
+        if: inputs.ccache_enabled && always()
+        run: ccache -s
+
       # ── 9. 保存 ccache ──
+      # 主键带 run_id，每次构建都是全新的键，因此可无条件保存，
+      # 从而持续写回本次新增的编译对象（不再因精确命中而冻结缓存）。
       - name: 保存 ccache 缓存
-        if: inputs.ccache_enabled && (inputs.ccache_update || steps.ccache_restore.outputs.cache-hit != 'true')
+        if: inputs.ccache_enabled
         uses: actions/cache/save@v4
         with:
           path: ~/.ccache
-          key: ${{ env.CCACHE_KEY }}-${{ runner.os }}-${{ github.ref_name }}
+          key: ${{ env.CCACHE_KEY }}-${{ runner.os }}-${{ github.ref_name }}-${{ github.run_id }}
 
       # ── 11. 准备产物 ──
       - name: 校验内核与设备树镜像
