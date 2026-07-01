@@ -427,13 +427,13 @@ jobs:
 
           # EXTRAVERSION：仅当提供了伪装值时改写 Makefile，留空则保留真实值。
           # （以 / 作为 sed 分隔符，故转义 & / \）
+          # 同时，仅在提供了伪装后缀时才禁用 Git 自动追加版本号（清除真实 scm 尾巴，
+          # 改用伪装值）；留空则保留 setlocalversion 原逻辑，输出真实 git 哈希后缀。
           if [ -n "${FAKE_EXTRAVERSION}" ]; then
             ESCAPED_EXTRA=$(printf '%s\n' "${FAKE_EXTRAVERSION}" | sed 's/[&/\\]/\\&/g')
             sed -i "s/^EXTRAVERSION =.*/EXTRAVERSION = ${ESCAPED_EXTRA}/" Makefile
+            sed -i '2i exit 0' scripts/setlocalversion
           fi
-
-          # 禁用 Git 自动追加版本号（伪装开启时始终清除 scm 版本尾巴，避免泄露真实提交状态）
-          sed -i '2i exit 0' scripts/setlocalversion
 
           # 伪装编译器字符串 (scripts/mkcompile_h 的 LINUX_COMPILER)，仅当提供了伪装值时替换，留空则保留真实值。
           # 4.14 的 mkcompile_h 没有 COMPILER= 变量，LINUX_COMPILER 由
