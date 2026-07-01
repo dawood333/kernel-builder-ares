@@ -90,22 +90,22 @@ on:
         default: ''
 
       kbuild_build_user:
-        description: '伪装编译用户名 (KBUILD_BUILD_USER)，留空则保留真实值'
+        description: '伪装编译用户名 (KBUILD_BUILD_USER)，留空则保留真实值, builder'
         required: false
         type: string
-        default: 'builder'
+        default: ''
 
       kbuild_build_host:
-        description: '伪装编译主机名 (KBUILD_BUILD_HOST)，留空则保留真实值'
+        description: '伪装编译主机名 (KBUILD_BUILD_HOST)，留空则保留真实值, android-builder'
         required: false
         type: string
-        default: 'android-builder'
+        default: ''
 
       kbuild_build_timestamp:
-        description: '伪装编译时间 (KBUILD_BUILD_TIMESTAMP)，留空则保留真实值'
+        description: '伪装编译时间 (KBUILD_BUILD_TIMESTAMP)，留空则保留真实值, Fri Mar 28 13:14:00 CST 2025'
         required: false
         type: string
-        default: 'Fri Mar 28 13:14:00 CST 2025'
+        default: ''
 
       kbuild_build_version:
         description: '伪装编译版本 (KBUILD_BUILD_VERSION)，留空则保留真实值'
@@ -114,16 +114,16 @@ on:
         default: '1'
 
       fake_extraversion:
-        description: '伪装内核版本号后缀 (FAKE_EXTRAVERSION)，留空则保留真实值'
+        description: '伪装内核版本号后缀 (FAKE_EXTRAVERSION)，留空则保留真实值, -g88e8616a5866'
         required: false
         type: string
-        default: '-g88e8616a5866'
+        default: ''
 
       fake_compiler:
         description: '伪装编译器信息 (FAKE_COMPILER)，留空则保留真实值'
         required: false
         type: string
-        default: '(Android (7284624, based on r416183b) clang version 12.0.5 (https://android.googlesource.com/toolchain/llvm-project c935d99d7cf2016289302412d708641d52d2f7ee), LLD 12.0.5 (/buildbot/src/android/llvm-toolchain/out/llvm-project/lld c935d99d7cf2016289302412d708641d52d2f7ee))'
+        default: ''
 
 jobs:
   # ============================================================
