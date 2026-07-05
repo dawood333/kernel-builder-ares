@@ -38,7 +38,7 @@ on:
         description: '是否使用超频内核分支 (true: chopin_kvm_oc, false: chopin_kvm)'
         required: true
         type: boolean
-        default: true
+        default: false
 
       ksu_enabled:
         description: '是否集成 ReSukiSU (Manual Hook)'
