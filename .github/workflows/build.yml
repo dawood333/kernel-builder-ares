@@ -11,8 +11,7 @@ env:
   DEFCONFIG_NAME: chopin_defconfig
 
   # ── 工具链 ──
-  # 实际工具链（AOSP Clang 12.0.5 r416183b + GCC 4.9）在“获取工具链”步骤中下载，
-  # 此处不再声明独立的 CLANG_* 变量以免与实际使用脱节。
+  # 实际工具链（AOSP Clang 12.0.5 r416183b，纯 LLVM 构建）
 
   # ── AnyKernel3 ──
   ANYKERNEL_REPO: https://github.com/osm0sis/AnyKernel3
@@ -154,22 +153,19 @@ jobs:
             ${{ env.KERNEL_REPO }} \
             ${{ env.KERNEL_NAME }}
 
-      # ── 3. 获取工具链 (AOSP Clang 12 & GCC 4.9) ──
+      # ── 3. 获取工具链 (AOSP Clang 12) ──
       - name: 获取工具链
         run: |
           mkdir -p aosp-clang
-          # 下载官方 AOSP Clang 12.0.5 (r416183b)
-          wget -qO clang.tar.gz https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/bd96dfe349c962681f0e5388af874c771ef96670/clang-r416183b.tar.gz
+          # 下载 AOSP Clang 12.0.5 (r416183b)，从本仓库 Release 镜像获取
+          CLANG_URL="https://github.com/seriaTvT/kernel-builder-chopin/releases/download/Toolchain/linux-x86-bd96dfe349c962681f0e5388af874c771ef96670-clang-r416183b.tar.gz"
+          for i in 1 2 3; do
+            wget -qO clang.tar.gz "$CLANG_URL" && break || { echo "下载失败，重试 $i/3..."; sleep 15; }
+          done
           tar -xf clang.tar.gz -C aosp-clang
-          
-          # 克隆 AOSP GCC 4.9 (Linux 4.14 汇编与部分链接依赖)
-          git clone --depth=1 https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9 aarch64-gcc
-          git clone --depth=1 https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9 arm-gcc
-          
+
           # 导入环境变量
           echo "${{ github.workspace }}/aosp-clang/bin" >> $GITHUB_PATH
-          echo "GCC_64_DIR=${{ github.workspace }}/aarch64-gcc/bin" >> $GITHUB_ENV
-          echo "GCC_32_DIR=${{ github.workspace }}/arm-gcc/bin" >> $GITHUB_ENV
 
       # ── 4. 准备 AnyKernel3 ──
       - name: 准备 AnyKernel3
@@ -468,8 +464,8 @@ jobs:
             ARCH=${{ env.ARCH }} \
             CC="${CC_CMD}" \
             CLANG_TRIPLE=aarch64-linux-gnu- \
-            CROSS_COMPILE="${{ env.GCC_64_DIR }}/aarch64-linux-android-" \
-            CROSS_COMPILE_ARM32="${{ env.GCC_32_DIR }}/arm-linux-androideabi-" \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
             LD=ld.lld \
             AR=llvm-ar \
             NM=llvm-nm \
@@ -501,8 +497,8 @@ jobs:
             ARCH=${{ env.ARCH }} \
             CC="${CC_CMD}" \
             CLANG_TRIPLE=aarch64-linux-gnu- \
-            CROSS_COMPILE="${{ env.GCC_64_DIR }}/aarch64-linux-android-" \
-            CROSS_COMPILE_ARM32="${{ env.GCC_32_DIR }}/arm-linux-androideabi-" \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
             LD=ld.lld \
             AR=llvm-ar \
             NM=llvm-nm \
