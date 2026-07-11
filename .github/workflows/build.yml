@@ -6,7 +6,7 @@ env:
   # ── 内核源码 ──
   KERNEL_NAME: Chopin-A16-KVM-Proton-release
   KERNEL_REPO: https://github.com/seriaTvT/kernel_mt6893
-  KERNEL_BRANCH: ${{ inputs.overclock && 'chopin_kvm_oc' || 'chopin_kvm' }}
+  KERNEL_BRANCH: chopin_kvm
   KERNEL_DEVICE: chopin
   DEFCONFIG_NAME: chopin_defconfig
 
@@ -34,12 +34,6 @@ env:
 on:
   workflow_dispatch:
     inputs:
-      overclock:
-        description: '是否使用超频内核分支 (true: chopin_kvm_oc, false: chopin_kvm)'
-        required: true
-        type: boolean
-        default: false
-
       ksu_enabled:
         description: '是否集成 ReSukiSU (Manual Hook)'
         required: true
