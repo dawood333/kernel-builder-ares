@@ -5,7 +5,7 @@ env:
 
   # ── 内核源码 ──
   KERNEL_NAME: Ares-4.14-KVM-Proton-release
-  KERNEL_REPO: https://github.com/seriaTvT/kernel_mt6893
+  KERNEL_REPO: https://github.com/dawood333/kernel_mt6893
   KERNEL_BRANCH: chopin_kvm
   KERNEL_DEVICE: ares
   DEFCONFIG_NAME: ares_defconfig
