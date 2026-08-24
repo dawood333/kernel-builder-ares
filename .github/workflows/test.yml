@@ -1,5 +1,5 @@
 
-name: test4.14
+name: Ares 4.14test
 
 env:
   TZ: Asia/Shanghai
@@ -148,9 +148,12 @@ jobs:
       - name: 获取工具链
         run: |
           mkdir -p aosp-clang
-          # 使用 Google AOSP 官方 Git 仓直接拉取预编译的 Clang 14 (Android 13 toolchain)
-          git clone --depth=1 -b master https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/clang-r450784d aosp-clang
-          
+          CLANG_URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android13-release/clang-r450784d.tar.gz"
+          for i in 1 2 3; do
+            wget -qO clang.tar.gz "$CLANG_URL" && break || { echo "下载失败，重试 $i/3..."; sleep 10; }
+          done
+          tar -xf clang.tar.gz -C aosp-clang
+
           # 导入环境变量
           echo "${{ github.workspace }}/aosp-clang/bin" >> $GITHUB_PATH
 
@@ -498,7 +501,6 @@ jobs:
           fi
           echo "内核镜像校验通过: ${BOOT_DIR}/Image"
 
-          # 排序后合并 DTB 避免顺序错乱
           find "${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/boot/dts/" -name "*.dtb" -type f | sort | xargs cat > "${BOOT_DIR}/dtb"
 
           if [[ ! -s "${BOOT_DIR}/dtb" ]]; then
