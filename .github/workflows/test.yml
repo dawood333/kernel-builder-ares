@@ -1,5 +1,5 @@
 
-name: Ares 4.14 内核构建
+name: test4.14
 
 env:
   TZ: Asia/Shanghai
