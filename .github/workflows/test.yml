@@ -1,4 +1,4 @@
-name: Ares 4.14 内核构建
+name: Aresmandi
 
 env:
   TZ: Asia/Shanghai
