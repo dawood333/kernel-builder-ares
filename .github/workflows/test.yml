@@ -1,4 +1,5 @@
-name: Aresmandi
+
+name: Ares 4.14clang16
 
 env:
   TZ: Asia/Shanghai
@@ -11,7 +12,7 @@ env:
   DEFCONFIG_NAME: ares_defconfig
 
   # ── 工具链 ──
-  # Mandi-Sa LLVM 23.0.0 (Binutils 2.45.1)
+  # AOSP Clang 16.0.4 (r487747c)
 
   # ── AnyKernel3 ──
   ANYKERNEL_REPO: https://github.com/osm0sis/AnyKernel3
@@ -26,7 +27,7 @@ env:
   FAKE_COMPILER: ${{ inputs.fake_compiler }}
 
   # ── ccache ──
-  CCACHE_KEY: ccache-ares-4.14-llvm23
+  CCACHE_KEY: ccache-ares-4.14-clang16
 
 on:
   workflow_dispatch:
@@ -133,7 +134,7 @@ jobs:
           sudo sed -i '/azure.archive.ubuntu.com/d' /etc/apt/apt-mirrors.txt
           sudo apt-get update
           sudo apt-get install -y build-essential bc gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi \
-            libssl-dev libfl-dev curl git ccache python2 python2-dev zip unzip p7zip-full
+            libssl-dev libfl-dev curl git ccache python2 python2-dev zip unzip
 
       # ── 2. 克隆内核源码 ──
       - name: 克隆内核源码
@@ -143,15 +144,15 @@ jobs:
             ${{ env.KERNEL_REPO }} \
             ${{ env.KERNEL_NAME }}
 
-      # ── 3. 获取工具链 (LLVM 23 Mandi-Sa) ──
+      # ── 3. 获取工具链 (AOSP Clang 16 - r487747c) ──
       - name: 获取工具链
         run: |
           mkdir -p aosp-clang
-          CLANG_URL="https://github.com/Mandi-Sa/clang/releases/download/amd64-kernel-arm_static-23/llvm23.0.0-binutils2.45.1_amd64-kernel-arm_static-20260224.7z"
+          CLANG_URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android14-release/clang-r487747c.tar.gz"
           for i in 1 2 3; do
-            wget -qO clang.7z "$CLANG_URL" && break || { echo "下载失败，重试 $i/3..."; sleep 10; }
+            wget -qO clang.tar.gz "$CLANG_URL" && break || { echo "下载失败，重试 $i/3..."; sleep 10; }
           done
-          7z x clang.7z -oaosp-clang/
+          tar -xf clang.tar.gz -C aosp-clang
 
           # 导入环境变量
           echo "${{ github.workspace }}/aosp-clang/bin" >> $GITHUB_PATH
@@ -436,8 +437,6 @@ jobs:
             READELF=llvm-readelf \
             STRIP=llvm-strip \
             OBJSIZE=llvm-size \
-            KCFLAGS="-Wno-error" \
-            KCPPFLAGS="-Wno-error" \
             ${{ env.DEFCONFIG_NAME }}
 
       - name: 编译内核与设备树
@@ -469,8 +468,6 @@ jobs:
             READELF=llvm-readelf \
             STRIP=llvm-strip \
             OBJSIZE=llvm-size \
-            KCFLAGS="-Wno-error" \
-            KCPPFLAGS="-Wno-error" \
             Image dtbs
 
       - name: 输出 ccache 统计
@@ -630,7 +627,7 @@ jobs:
           - 内核分支: ${{ env.KERNEL_BRANCH }}
           - 内核版本: ${{ env.FULL_VERSION }}
           - 编译时间: ${{ env.TIME_FORM }}
-          - 工具链: Mandi-Sa LLVM 23.0.0 (Binutils 2.45.1)
+          - 工具链: AOSP Clang 16.0.4 (r487747c)
           - KernelSU: ${{ env.KSU_STATUS }}
           - Droidspaces: ${{ env.DS_STATUS }}
           - AnyKernel3 打包: ${{ inputs.use_anykernel }}
