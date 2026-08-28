@@ -6,8 +6,8 @@ env:
 
   # ── 内核源码 ──
   KERNEL_NAME: Ares-4.14-KVM-Proton-release
-  KERNEL_REPO: https://github.com/dawood333/kernel_mt6893
-  KERNEL_BRANCH: test
+  KERNEL_REPO: https://github.com/dawood333/kernel_xiaomi_mt6893_new
+  KERNEL_BRANCH: lineage-23.2
   KERNEL_DEVICE: ares
   DEFCONFIG_NAME: ares_defconfig
 
