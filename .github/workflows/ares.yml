@@ -5,9 +5,9 @@ env:
 
   # ── 内核源码 ──
   KERNEL_NAME: Ares-4.14-KVM-Proton-release
-  KERNEL_REPO: https://github.com/dawood333/kernel_mt6893
+  KERNEL_REPO: https://github.com/dawood333/mtk6893
   KERNEL_BRANCH: feature/cgroup2-support
-  KERNEL_DEVICE: susfs
+  KERNEL_DEVICE: a17-adaptation
   DEFCONFIG_NAME: ares_defconfig
 
   # ── 工具链 ──
