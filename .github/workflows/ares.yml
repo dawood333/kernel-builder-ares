@@ -533,7 +533,7 @@ jobs:
             READELF=llvm-readelf \
             STRIP=llvm-strip \
             OBJSIZE=llvm-size \
-            Image dtbs
+            Image-dtb dtbs
 
       - name: 输出 ccache 统计
         if: inputs.ccache_enabled && always()
@@ -558,24 +558,27 @@ jobs:
           SUFFIX="${{ inputs.kernel_suffix }}"
           SUFFIX_STR="${SUFFIX:+-${SUFFIX}}"
           IMAGE_NAME="Image-${{ env.KERNEL_DEVICE }}-${{ env.KERNEL_NAME }}${SUFFIX_STR}-${BUILDDATE}"
-          DTB_NAME="dtb-${{ env.KERNEL_DEVICE }}-${{ env.KERNEL_NAME }}${SUFFIX_STR}-${BUILDDATE}"
+          DTB_NAME="Image-dtb-${{ env.KERNEL_DEVICE }}-${{ env.KERNEL_NAME }}${SUFFIX_STR}-${BUILDDATE}"
           echo "image_name=${IMAGE_NAME}" >> $GITHUB_OUTPUT
           echo "dtb_name=${DTB_NAME}" >> $GITHUB_OUTPUT
 
-          if [[ ! -f "${BOOT_DIR}/Image" ]]; then
-            echo "::error::未找到内核镜像文件 (Image)，构建失败"
+          if [[ ! -f "${BOOT_DIR}/Image-dtb" ]]; then
+            echo "::error::未找到 Image-dtb，构建失败"
             exit 1
           fi
-          echo "内核镜像校验通过: ${BOOT_DIR}/Image"
+          echo "内核镜像校验通过: ${BOOT_DIR}/Image-dtb"
 
-          # 寻找编译出的所有 dtb 文件并合并为单文件 dtb
-          find "${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/boot/dts/" -name "*.dtb" -type f -exec cat {} + > "${BOOT_DIR}/dtb"
-
-          if [[ ! -s "${BOOT_DIR}/dtb" ]]; then
-            echo "::error::未找到编译出的 DTB 文件，构建失败"
+          DTB="${BOOT_DIR}/dts/mediatek/mt6893.dtb"
+          if [[ ! -f "$DTB" ]]; then
+            echo "::error::未找到 MT6893 DTB: $DTB"
             exit 1
           fi
-          echo "DTB 文件校验及合并通过: ${BOOT_DIR}/dtb"
+          if ! strings "$DTB" | grep -q "mediatek,geniezone-hyp"; then
+            echo "::error::geniezone-hyp 不存在于编译后的 MT6893 DTB"
+            exit 1
+          fi
+          echo "GenieZone GZVM node found in MT6893 DTB"
+          rm -f "${BOOT_DIR}/dtb"
 
       - name: 打包 AnyKernel3
         if: inputs.use_anykernel
@@ -588,14 +591,11 @@ jobs:
           AK3_NAME="${{ env.KERNEL_DEVICE }}-${{ env.KERNEL_NAME }}${SUFFIX_STR}_${BUILDDATE}"
 
           # 复制内核与设备树镜像到 AnyKernel3
-          if [ -f "${BOOT_DIR}/Image" ]; then
-            cp -f "${BOOT_DIR}/Image" ./AnyKernel3/
+          if [ -f "${BOOT_DIR}/Image-dtb" ]; then
+            cp -f "${BOOT_DIR}/Image-dtb" ./AnyKernel3/
           fi
           if [ -f "${BOOT_DIR}/Image.gz" ]; then
             cp -f "${BOOT_DIR}/Image.gz" ./AnyKernel3/
-          fi
-          if [ -f "${BOOT_DIR}/dtb" ]; then
-            cp -f "${BOOT_DIR}/dtb" ./AnyKernel3/
           fi
           if [ -f "${BOOT_DIR}/dtbo" ]; then
             cp -f "${BOOT_DIR}/dtbo" ./AnyKernel3/
@@ -622,15 +622,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.prepare_image.outputs.image_name }}
-          path: ${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/boot/Image
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: 上传 dtb
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.prepare_image.outputs.dtb_name }}
-          path: ${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/boot/dtb
+          path: ${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/boot/Image-dtb
           if-no-files-found: error
           retention-days: 7
 
@@ -730,11 +722,6 @@ jobs:
 
           # Image 文件
           for f in ./release_files/*/Image; do
-            RELEASE_FILES+=("$f")
-          done
-
-          # dtb 文件
-          for f in ./release_files/*/dtb; do
             RELEASE_FILES+=("$f")
           done
 
