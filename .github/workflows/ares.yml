@@ -182,7 +182,10 @@ jobs:
           do.cleanuponabort=0
           '; }
           
-          BLOCK=auto;
+          # Ares uses the legacy/MTK boot image as the runtime DTB container.
+          # Do not let AnyKernel3 move dtb into vendor_boot just because vendor_boot exists.
+          touch vendor_v3_setup
+          BLOCK=boot;
           IS_SLOT_DEVICE=auto;
           RAMDISK_COMPRESSION=auto;
           PATCH_VBMETA_FLAG=auto;
