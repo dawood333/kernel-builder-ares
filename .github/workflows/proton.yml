@@ -77,8 +77,8 @@ on:
 env:
   TZ: Asia/Shanghai
   KERNEL_NAME: Ares-4.14-KVM-Proton-release
-  KERNEL_REPO: https://github.com/dawood333/mtk6893
-  KERNEL_BRANCH: d
+  KERNEL_REPO: dawood333/agate-bakasu-susfs
+  KERNEL_BRANCH: main
   KERNEL_DEVICE: ares
   DEFCONFIG_NAME: ares_defconfig
   PROTON_REPO: https://gitlab.com/LeCmnGend/proton-clang.git
