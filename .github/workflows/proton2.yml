@@ -170,26 +170,6 @@ jobs:
             gh cache delete "$k" -R '${{ github.repository }}' || true
           done
 
-      - name: 集成 ReSukiSU (Manual Hook)
-        if: inputs.ksu_enabled
-        working-directory: ${{ env.KERNEL_NAME }}
-        run: |
-          set -euo pipefail
-          rm -rf ./KernelSU ./drivers/kernelsu
-          curl -fLSs https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh -o /tmp/resukisu-setup.sh
-          bash /tmp/resukisu-setup.sh main
-          cat >> "arch/${ARCH}/configs/${DEFCONFIG_NAME}" <<'EOF'
-          CONFIG_KSU=y
-          CONFIG_KSU_MANUAL_HOOK=y
-          CONFIG_KSU_MANUAL_HOOK_AUTO_INPUT_HOOK=y
-          CONFIG_KSU_MANUAL_HOOK_AUTO_SETUID_HOOK=y
-          CONFIG_KSU_MANUAL_HOOK_AUTO_INITRC_HOOK=y
-          CONFIG_KSU_MULTI_MANAGER_SUPPORT=y
-          CONFIG_KALLSYMS=y
-          CONFIG_KALLSYMS_ALL=y
-          CONFIG_KALLSYMS_ABSOLUTE_PERCPU=y
-          EOF
-
       - name: 集成 Droidspaces 支持
         if: inputs.droidspaces_enabled
         working-directory: ${{ env.KERNEL_NAME }}
