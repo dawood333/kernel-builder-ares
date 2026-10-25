@@ -245,6 +245,7 @@ jobs:
         if: inputs.ksu_enabled
         working-directory: ${{ env.KERNEL_NAME }}
         run: |
+          set -euo pipefail
           if [ -d "./KernelSU" ]; then
             rm -rf "./KernelSU"
           fi
@@ -501,6 +502,23 @@ jobs:
             STRIP=llvm-strip \
             OBJSIZE=llvm-size \
             ${{ env.DEFCONFIG_NAME }}
+
+          # Fail early if Kconfig discarded any required ReSukiSU options.
+          if [[ "${{ inputs.ksu_enabled }}" == "true" ]]; then
+            CONFIG_FILE="${{ env.OUT_DIR }}/.config"
+            for option in \
+              CONFIG_KSU \
+              CONFIG_KSU_MANUAL_HOOK \
+              CONFIG_KSU_MANUAL_HOOK_AUTO_INPUT_HOOK \
+              CONFIG_KSU_MANUAL_HOOK_AUTO_SETUID_HOOK \
+              CONFIG_KSU_MANUAL_HOOK_AUTO_INITRC_HOOK \
+              CONFIG_KALLSYMS_ALL; do
+              if ! grep -qx "${option}=y" "$CONFIG_FILE"; then
+                echo "::error::Required ReSukiSU option missing after ares_defconfig: ${option}"
+                exit 1
+              fi
+            done
+          fi
 
       - name: 编译内核与设备树
         working-directory: ${{ env.KERNEL_NAME }}
