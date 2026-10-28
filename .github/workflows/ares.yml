@@ -5,8 +5,8 @@ env:
 
   # ── 内核源码 ──
   KERNEL_NAME: Ares-usb
-  KERNEL_REPO: https://github.com/dawood333/kernel_mt6893
-  KERNEL_BRANCH: chopin-a17-cgroup
+  KERNEL_REPO: https://github.com/dawood333/mtk6893n
+  KERNEL_BRANCH: cgroup-v2-backport
   KERNEL_DEVICE: ares
   DEFCONFIG_NAME: ares_defconfig
 
